@@ -14,6 +14,7 @@ reverse it**.
 | 004 | [Ambiguous near-duplicates are resolved by asking the caller](004-ask-on-unqueryable-ambiguity.md) | accepted |
 | 005 | [Semantic layer: Postgres + pgvector, ranking inside a constrained set](005-semantic-layer-pgvector.md) | accepted |
 | 006 | [Proximity: PostGIS, coarse caller area, no geocoder in the call path](006-proximity-postgis.md) | accepted |
+| 007 | [One fictional geography shared by data and tests](007-fictional-geography.md) | accepted |
 
 Related: `approaches/` holds candidate solutions (options under consideration);
 `decisions/` holds choices made among them.
