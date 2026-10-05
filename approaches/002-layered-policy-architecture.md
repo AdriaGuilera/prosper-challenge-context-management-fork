@@ -103,6 +103,81 @@ invalidates the verification evidence, so re-verify on every ingest.
 
 ---
 
+## Data model
+
+Four tiers. Note that every child table carries the catalog version, so history is kept by
+append and any past booking can be explained against the data in force at the time.
+
+**1. Source payload** (what a hospital uploads) — exactly the shape we were given: four
+top-level arrays, string ids, prose policies inside the payload. Two things are *absent*
+and must be supplied: patient state and availability.
+
+**2. Canonical store** — normalised, per-source, versioned:
+
+```sql
+catalog_versions(id, source_id, source_sha, ingested_at, report_json)
+
+locations(id, catalog_version_id, name, address, city, phone, hours)
+location_capabilities(catalog_version_id, location_id, capability)          -- PK(...)
+providers(id, catalog_version_id, name, title, specialty, accepting_new_patients)
+provider_languages(catalog_version_id, provider_id, language)              -- PK(...)
+provider_locations(catalog_version_id, provider_id, location_id)           -- PK(...)
+appointment_types(id, catalog_version_id, name, specialty, duration_min,
+                  requires_referral, new_patients_allowed, required_capability)
+provider_appointment_types(catalog_version_id, provider_id, appointment_type_id)  -- PK(...)
+```
+
+**3. Policy IR** — rules as data, the source of truth. Not SQL, not CEL:
+
+```sql
+policy_sets(id, source_id, catalog_version_id, version, published_at, immutable)
+policy_rules(id, policy_set_id, rule_id, effect, scope, predicate_ir,
+             absence_semantics, message, tier, source_text, examples_json)
+```
+
+`source_text` is the hospital's original prose; `examples_json` holds the confirmed
+positive/negative examples that became the regression suite.
+
+**4. Patient state and mocked availability** — supplied, not given:
+
+```sql
+patients(id, is_new)
+referrals(patient_id, appointment_type_id, issued_on, expires_on)
+
+schedules(id, provider_id, location_id, weekday, start, end)   -- the shape the repo dropped
+```
+
+### Example rows (real data)
+
+`providers` — note two different humans, one name:
+
+```
+id        catalog_version  name              title  specialty         accepting_new
+prov_002  catalog_v1       Dr. Maria Garcia  MD     Pediatrics        1
+prov_003  catalog_v1       Dr. Maria Garcia  NP     Family Medicine   1
+```
+
+`provider_locations` / `provider_appointment_types` — the graph, which is the authority:
+
+```
+prov_000  loc_000      prov_000  appt_020   (Cardiology Consultation)
+prov_000  loc_001      prov_000  appt_021   (Echocardiogram — required_capability=imaging)
+prov_000  loc_004      prov_000  appt_022   (Stress Test)
+prov_000  loc_007
+```
+
+`location_capabilities` — which of Dr. Chen's four sites can host an echocardiogram:
+
+```
+loc_000  lab, physical_therapy, surgery          → cannot host appt_021
+loc_001  imaging, lab, physical_therapy, dental  → can
+loc_004  imaging                                 → can
+loc_007  surgery                                 → cannot host appt_021
+```
+
+`absent` is not `null` — `required_capability` is simply missing on 65 of 82 types, which
+is why absence semantics are declared per rule rather than inferred.
+
 ## Components that are explicitly *not* policy
 
 - **Slot selection → CP-SAT (OR-Tools).** "Soonest / preferred provider / preferred
