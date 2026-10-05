@@ -200,6 +200,50 @@ must be parsed at ingest into intervals, or "are you open on Sunday?" is unanswe
 It gets validity windows **and** is the one operational field whose change invalidates
 verification.
 
+## What is guaranteed, and what isn't
+
+A guarantee means a deterministic layer enforces it and a test proves it — not that a
+prompt asks nicely. Three grades.
+
+**Hard — validators, enforced at commit, no LLM in the path**
+
+- *Duplicate provider names.* Ids are the only keys (`providers.id` unique, 50/50); name
+  resolution returns a **set**, and a booking from an undiscriminated set is rejected.
+  Measured: 3 exact full-name collisions covering 6 providers, and 12 surnames shared by
+  more than one provider — Nguyen ×8, Chen ×7, Sato ×6.
+- *Location-gated services.* The capability join. 760/760 valid triples, 37 invalid ones
+  rejected. A booking at a location lacking the capability cannot be written.
+- *Multi-location providers.* The location is a required component of the booking key.
+  34 of 50 providers practise at more than one site (2 of them at four).
+
+**Conditional — invariants of the data: assert at ingest, never assume**
+
+- "Every gated type a provider offers has a viable location." Holds here: 0 of 31 gated
+  (provider, type) pairs lacks one. But it is a *property of the data* — the repo had to
+  add commit `4467d93` to establish it. Assert it at ingest and report violations.
+- Type-level orphans are a separate check that invariant does not cover: 8 types no
+  provider offers at all, including the two capability-gated Physical Therapy types. That
+  is how the commit's claim and the shipped data disagree — the gap is at type level, not
+  provider level.
+
+**Soft — score it; don't pretend to guarantee it**
+
+- *Near-duplicate types.* For Annual Physical vs Annual Wellness Visit the data carries no
+  signal at all — identical referral flag, identical `new_patients_allowed`, identical
+  duration. Worse, **21 of 50 providers offer both**, so for 42% of providers the graph
+  cannot decide either. Guaranteeable: never choose silently, and prefer the graph when it
+  does decide. Not guaranteeable: mapping caller language onto the pair when both are
+  offered.
+- *Over-asking.* 30 of 31 gated (provider, type) pairs have exactly **one** viable
+  location, so asking the caller there is a defect rather than diligence. That is a quality
+  metric, not an invariant — invariants prevent invalid bookings, not annoying ones.
+
+**The four bullets describe *this* catalog, not catalogs.** Under decision 002 a new
+payload may have zero collisions or ten. So the eval must derive its traps from the
+ingested data at test time — detect collisions, near-duplicates, orphans, and
+forced-vs-ambiguous gates programmatically — instead of hardcoding "Dr. Nguyen ×8", or the
+regression suite quietly goes vacuous against the next payload.
+
 ## Components that are explicitly *not* policy
 
 - **Slot selection → CP-SAT (OR-Tools).** "Soonest / preferred provider / preferred
