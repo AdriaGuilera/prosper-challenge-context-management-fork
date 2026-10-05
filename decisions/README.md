@@ -16,6 +16,7 @@ reverse it**.
 | 006 | [Proximity: PostGIS, coarse caller area, no geocoder in the call path](006-proximity-postgis.md) | accepted |
 | 007 | [One fictional geography shared by data and tests](007-fictional-geography.md) | accepted |
 | 008 | [Scale hardening: namespaced identity, bounded results, degradation](008-scale-and-multitenant-hardening.md) | accepted |
+| 009 | [Alias table and ambiguity clusters now; semantic layer deferred](009-alias-first-embeddings-deferred.md) | accepted (revises 005's timing) |
 
 Related: `approaches/` holds candidate solutions (options under consideration);
-`decisions/` holds choices made among them.
+`decisions/` holds choices made among them; `reviews/` holds external review of both.
