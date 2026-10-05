@@ -238,6 +238,46 @@ prompt asks nicely. Three grades.
   location, so asking the caller there is a defect rather than diligence. That is a quality
   metric, not an invariant — invariants prevent invalid bookings, not annoying ones.
 
+**Ambiguity is a query problem — where there is something to query on**
+
+If names collide but other columns separate them, the agent doesn't guess and doesn't
+need to ask blindly: its own query returns the discriminating attributes. Measured across
+the 12 colliding surnames:
+
+- **9 of 12 separate on (specialty, title)** alone — Nguyen, Sato, Garcia, Ramirez,
+  Martinez, Hernandez, Rodriguez, Singh, Kim.
+- The **3 remaining ties** are Chen (Cardiology, MD), Smith (Psychiatry, MD) and Patel
+  (Internal Medicine, MD) — where specialty *and* title match. Each is still separable on
+  a queryable column: first name, locations, languages, or `accepting_new_patients`.
+- So **every** name collision is resolvable from the store, provided the query returns the
+  discriminating columns with the candidates.
+
+That reframes the requirement: normalisation doesn't remove the question, it makes the
+question **answerable and closing** — "is that the dermatologist or the cardiologist?"
+only works because specialty is a column. The selection policy follows: return candidates
+*with* their discriminators, ask the one question that splits the set, and when the set is
+already a singleton, don't ask at all.
+
+**Except where there is nothing to query on.** The near-duplicate *types* have no
+discriminator at all:
+
+```
+Annual Physical        vs Annual Wellness Visit   identical on 4 fields, differs only on specialty
+Skin Cancer Screening  vs Full Body Skin Exam     identical on 4 fields, differs on NOTHING
+School Physical        vs Sports Physical         identical on 4 fields, differs on NOTHING
+```
+
+And the graph can't resolve it either — a provider is given the whole block for their
+specialty, so a Dermatology provider offers both skin types, and a Pediatrics provider
+offers both physicals. There is no query that separates them, and `specialty` is not a
+question a patient can answer. This residual gap is closed by the lexicon or by a question
+about intent — not by the store. It is the honest limit of the query approach, and it is
+worth stating rather than discovering in a demo.
+
+The mechanically checkable version of all this: a resolution step either returns a
+**singleton**, or returns a set **with an askable splitter**. If it returns neither, that's
+a case for the lexicon — and a coverage metric.
+
 **The four bullets describe *this* catalog, not catalogs.** Under decision 002 a new
 payload may have zero collisions or ten. So the eval must derive its traps from the
 ingested data at test time — detect collisions, near-duplicates, orphans, and
