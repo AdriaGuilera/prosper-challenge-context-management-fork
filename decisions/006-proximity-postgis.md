@@ -29,18 +29,48 @@ coordinate space. Same service, same version, same country bias.
 
 ## Three corrections
 
-**1. These addresses are synthetic, so geocoding them is unreliable.** The catalog generator
-produced `f"{random.randint(100, 4999)} {random.choice(STREETS)}"` with `city` hardcoded to
-"San Francisco" — `4874 Main St`, `4732 Market St`. They are not real addresses. A geocoder
-returns nothing or garbage. For this catalog, **fabricate deterministic coordinates** inside
-the SF bounding box; for a real tenant, geocode once at ingest. Same code path, different
-source — and the source is recorded (`geocode_source`, `geocode_version`).
+**1. The addresses are fiction, and they contradict the location names.** Every phone number is
+in the reserved fictional `(415) 555-xxxx` range, and the eight locations share only **five**
+distinct streets drawn from a pool of ten with numbers generated at random from 100–4999:
 
-**2. A voice call has no location signal, so the caller side is a coarse area, not an address.**
-No GPS on a phone call. "Closest to me" resolves to a phone number's area code at best. The
-realistic input is a named neighbourhood or ZIP, which needs a small
-`areas(name, aliases[], centroid)` table — eight rows here — not a geocoder in the call path.
-This also removes the privacy problem: a caller's spoken location never leaves the box.
+```
+loc_000  Mission Bay Health Center     4874 Main St      (415) 555-9313
+loc_001  Mission District Family Clinic 4732 Market St   (415) 555-4657
+loc_002  North Beach Specialty Center  481 Mission St    (415) 555-3181
+loc_003  North Gate Health Center      944 Bryant St     (415) 555-4078
+loc_004  Downtown Health Center        4455 Geary Blvd   (415) 555-6146
+loc_005  Midtown Medical Group         2099 Market St    (415) 555-5919
+loc_006  Sunset Community Clinic       4293 Geary Blvd   (415) 555-3702
+loc_007  Richmond Care Center          4671 Bryant St    (415) 555-6140
+```
+
+Some numbers are merely implausible (`4732 Market St` — Market Street runs out long before
+that); others are impossible. And the name disagrees with the street geographically: *Sunset
+Community Clinic* at a Geary Blvd address, *Richmond Care Center* on Bryant St in SoMa.
+
+Consequence: **for this catalog, geocoding produces coordinates that contradict the names.** A
+better answer is available — match on the street name against the catalog's own fields, which
+is exact and offline and does not care whether the address is real. Geocoding is for real
+tenants. Same code path, different source, recorded per row (`geocode_source`,
+`geocode_version`).
+
+**2. The caller can state a place — resolve it with a local gazetteer first.** Stated location
+is fine input; what a phone call lacks is *automatic* location (no GPS, area code at best). But
+free-form speech needs resolving, and it arrives through STT, so:
+
+- **gazetteer first** — build it from what we already have: the catalog's own street names,
+  location names and the neighbourhood list. Exact plus trigram match. Free, offline,
+  deterministic, sub-millisecond, and it handles "the Sunset one" and "Geary Blvd" correctly.
+- **geocoder only as fallback**, for a place the gazetteer has never seen — and self-hosted
+  (Nominatim/OSRM), never a third-party API, because a residential address spoken during a
+  healthcare call is exactly the data that must not leave the box.
+- **know the failure modes**: STT garbles street names ("Geary" → "Gary", "Bryant" → "Brian"),
+  and street names alone are ambiguous — Market St and Mission St each span the city. Same
+  ambiguity class as near-duplicate types: ask, or use the caller's stated area.
+
+For "closest to me" with nothing stated, fall back to a small
+`areas(name, aliases[], centroid)` table — eight rows here — rather than asking for a home
+address on a recorded call.
 
 **3. Straight-line distance is not travel time.** In San Francisco 1.2 km straight-line can be
 20 minutes of traffic. Rank by distance, but never *promise* travel time. Real drive-time
