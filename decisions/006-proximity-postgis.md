@@ -90,6 +90,28 @@ types: ask, or fall back to the caller's stated area.
 **ranking-only**, so re-geocoding never invalidates policy verification. Consistent with
 decision 003.
 
+## Sizing — why no geocoder runs resident here
+
+Nominatim's own figures: minimum **2 GB** to install at all; a **full planet wants 128 GB**
+(their words: *do not report out-of-memory problems if you have less than 64 GB*) plus **1 TB
+of disk** and ~2.5 days on NVMe to import.
+
+This box is a Hetzner VPS with **7.6 GB RAM (~5 GB available) and 53 GB free disk**, already
+running production apps. So:
+
+- full planet — impossible, by two orders of magnitude on both RAM and disk
+- country extract — possible but would compete with live apps for memory
+- city/metro extract — comfortable, minutes to import, a couple of GB
+
+**But the right answer is none of these.** Eight locations and five distinct streets is a
+gazetteer of a few hundred bytes. And if geocoding is ever needed, it belongs **at ingest as a
+one-off batch**: RAM becomes a build-time cost, not a runtime one, and only the resulting
+coordinates ship. Nothing geocoder-shaped should ever appear in the call path or on this box's
+resident memory budget.
+
+Routing (OSRM/Valhalla) is the genuinely heavy dependency if "closest" ever has to mean travel
+time. Nominatim's numbers above are verified; OSRM's are not — check before committing to it.
+
 ## What would reverse this
 
 Real addresses arriving in a source's payload, which makes geocoding exact rather than
