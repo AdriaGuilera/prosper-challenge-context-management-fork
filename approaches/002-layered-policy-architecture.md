@@ -178,6 +178,28 @@ loc_007  surgery                                 → cannot host appt_021
 `absent` is not `null` — `required_capability` is simply missing on 65 of 82 types, which
 is why absence semantics are declared per rule rather than inferred.
 
+### Change classes — not everything versions the same way
+
+Splitting by *change rate*, not by entity (decision 003):
+
+- **structural** — providers, types, capabilities, relations. Rare change. Versioned by
+  `catalog_version`. Policy-relevant, so a change triggers re-verification.
+- **operational** — opening hours, closures, capacity. High churn, own table with
+  `valid_from` / `valid_to`, separate write path, and **no** re-verification.
+
+```sql
+location_hours(location_id, weekday, open_min, close_min, valid_from, valid_to)
+closures(location_id, reason, starts_at, ends_at)
+```
+
+`hours` today is the free-text string `"Mon-Fri 8:00-17:00"` on all eight locations — it
+must be parsed at ingest into intervals, or "are you open on Sunday?" is unanswerable and
+"answering questions about locations" is unimplementable.
+
+`accepting_new_patients` sits in both classes: high churn *and* policy-relevant (policy 5).
+It gets validity windows **and** is the one operational field whose change invalidates
+verification.
+
 ## Components that are explicitly *not* policy
 
 - **Slot selection → CP-SAT (OR-Tools).** "Soonest / preferred provider / preferred
