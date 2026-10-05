@@ -1,8 +1,8 @@
 # Decision 006 — Proximity: PostGIS on stored coordinates, coarse caller area, no geocoder in the call path
 
-**Status:** accepted
+**Status:** accepted; the geocoder fallback is superseded by decision 007
 **Date:** 2026-10-05
-**Supersedes:** nothing · **Superseded by:** —
+**Supersedes:** nothing · **Superseded by:** 007 (geocoder fallback only)
 
 ## Context
 
@@ -61,9 +61,11 @@ free-form speech needs resolving, and it arrives through STT, so:
 - **gazetteer first** — build it from what we already have: the catalog's own street names,
   location names and the neighbourhood list. Exact plus trigram match. Free, offline,
   deterministic, sub-millisecond, and it handles "the Sunset one" and "Geary Blvd" correctly.
-- **geocoder only as fallback**, for a place the gazetteer has never seen — and self-hosted
-  (Nominatim/OSRM), never a third-party API, because a residential address spoken during a
-  healthcare call is exactly the data that must not leave the box.
+- **no geocoder at all** (decision 007). The geography is fictional and complete, so the
+  gazetteer is the whole story. If a real tenant ever arrives with real addresses, geocoding is
+  a one-off offline batch on some other machine — never in the call path, never resident on this
+  box, and never a third-party API, because a residential address spoken during a healthcare
+  call is exactly the data that must not leave the building.
 - **know the failure modes**: STT garbles street names ("Geary" → "Gary", "Bryant" → "Brian"),
   and street names alone are ambiguous — Market St and Mission St each span the city. Same
   ambiguity class as near-duplicate types: ask, or use the caller's stated area.
