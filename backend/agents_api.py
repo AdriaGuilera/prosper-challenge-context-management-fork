@@ -77,20 +77,14 @@ def list_tools() -> list:
 
 
 # Models offered in the picker. Benchmarked on a spoken-reply + tool-call turn
-# (time to first token, streaming, tools attached): all land around 1s with
-# reasoning off, which a voice turn needs. Left out: models that called tools
-# unprompted in that test (gpt-5-mini, gpt-5.4-mini) and gpt-5.6-sol, the
-# slowest and priciest, built for long reasoning rather than conversation.
+# (time to first token, streaming, tools attached): all land around 1-2s, which
+# a voice turn needs. GPT-5.6 models run with reasoning off for the same reason.
 MODELS = [
     {"id": "gpt-4o", "label": "GPT-4o", "note": "Default. Proven on this agent"},
+    {"id": "gpt-4o-mini", "label": "GPT-4o mini", "note": "Faster, cheaper"},
     {"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "note": "Newest. Fast tier, made for conversation", "reasoning_effort": "none"},
     {"id": "gpt-5.6-terra", "label": "GPT-5.6 Terra", "note": "Newest. Balanced, stronger reasoning", "reasoning_effort": "none"},
-    {"id": "gpt-5.5", "label": "GPT-5.5", "note": "Previous flagship", "reasoning_effort": "none"},
-    {"id": "gpt-5.4", "label": "GPT-5.4", "note": "Quick replies, solid tool calls", "reasoning_effort": "none"},
-    {"id": "gpt-5.4-nano", "label": "GPT-5.4 nano", "note": "Fastest tool calls, cheapest", "reasoning_effort": "none"},
-    {"id": "gpt-5.1", "label": "GPT-5.1", "note": "Fast tool calls", "reasoning_effort": "none"},
 ]
-
 
 def model_extra(model: str) -> dict:
     """Request params a model needs beyond its id (GPT-5 models reason unless told not to)."""
