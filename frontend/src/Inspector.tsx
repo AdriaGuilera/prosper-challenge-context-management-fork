@@ -137,7 +137,9 @@ function AgentForm({ agent, problems, locked, onAgent, onSelect }: Props) {
 
 function NodeForm({ agent, node, tools, problems, locked, onNode, onRenameNode, onDeleteNode, onAgent, onSelect }: Props & { node: AgentNode }) {
   const [name, setName] = useState(node.name)
-  useEffect(() => setName(node.name), [node.name])
+  useEffect(() => {
+    setName(node.name)
+  }, [node.name])
   const task = node.task_messages[0]?.content ?? ''
   const mine = problems.filter((p) => p.node === node.name)
   const commitName = () => {

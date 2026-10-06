@@ -18,8 +18,14 @@ const STATUS: Record<CallTrace['status'], string> = {
 export function CallPanel({ trace, onDismiss }: Props) {
   const transcriptEnd = useRef<HTMLLIElement>(null)
   const traceEnd = useRef<HTMLLIElement>(null)
-  useEffect(() => transcriptEnd.current?.scrollIntoView({ block: 'nearest' }), [trace.transcript])
-  useEffect(() => traceEnd.current?.scrollIntoView({ block: 'nearest' }), [trace.tools.length])
+  // Braces matter: Chrome's scrollIntoView now returns a Promise, and an effect
+  // that returns anything but a cleanup function crashes React on unmount.
+  useEffect(() => {
+    transcriptEnd.current?.scrollIntoView({ block: 'nearest' })
+  }, [trace.transcript])
+  useEffect(() => {
+    traceEnd.current?.scrollIntoView({ block: 'nearest' })
+  }, [trace.tools.length])
 
   const done = trace.status === 'ended' || trace.status === 'error'
   return (

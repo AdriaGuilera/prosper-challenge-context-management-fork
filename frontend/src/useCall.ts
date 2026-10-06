@@ -65,6 +65,9 @@ export function useCall(edgeIndex: (source: string, fn: string) => number) {
           onServerMessage: (data: unknown) => onEvent(data as CallEvent),
           onUserTranscript: (d) => say('caller', d.text, d.final),
           onBotOutput: (d) => {
+            // Each sentence arrives once as "new", then again as "in-progress"/"completed"
+            // while the words are spoken. Take it the first time only.
+            if (d.spoken_status && d.spoken_status !== 'new') return
             if (d.aggregated_by === 'sentence' || !d.aggregated_by) say('agent', d.text, false)
           },
           onBotStoppedSpeaking: closeAgentTurn,
