@@ -252,9 +252,32 @@ is suggestive, not conclusive. The given personas mostly use phrases the curated
 that coverage is exactly why decision 009 put aliases first. Vectors earn their place on phrasing nobody curated,
 which the offline benchmark isolates.
 
+## The voice pipeline still works (`make smoke-pipeline`)
+
+`backend/evals/pipeline_smoke.py` builds the same pipeline as `bot.run_bot`: `OpenAILLMService`,
+`LLMContextAggregatorPair`, `PipelineWorker`, `pipecat_flows.FlowManager` and `AgentBuilder` over the Postgres tools. It
+replaces only WebRTC, STT and TTS: the caller simulator's words are injected as user turns, and the LLM's text frames
+are collected where TTS would read them. The same deterministic judge then grades the call.
+
+On the agent's configured model (gpt-4o), all three calls pass:
+
+| persona | verdict | nodes walked | tools called |
+|---|---|---|---|
+| happy-flu-shot | PASS ideal | greeting → identify_visit → find_slot → confirm_booking → goodbye | lookup_patient, search_appointment_types, check_availability, book_appointment |
+| chen-echo-downtown | PASS ideal | same | + find_providers (two Dr. Chens asked about) |
+| skin-check-one-spot | PASS ideal | same | cluster question asked, Skin Cancer Screening booked |
+
+With `SMOKE_MODEL=gpt-4o-mini`, the flu shot passes and the Dr. Chen case fails the same way it does in the text eval:
+mini lingers in identify_visit instead of taking the edge. That makes the text runner and the real FlowManager
+agree on behaviour, not only on plumbing.
+
+`bot.py` also boots against Postgres on a spare port and serves the six new tools at `/api/tools` (the
+baseline-only `list_slots` is hidden). The UI's tool picker and the call trace render tools by name, so they need no
+change.
+
 ## Limits of this evidence
 
-- **Text only.** STT errors are simulated only by persona wording ("Ngyuen", "Gary") and the fuzzy and phonetic matchers. The voice demo was smoke-tested to start (`bot.py` serves the new tools against Postgres), not exercised with audio in this pass.
+- **No audio.** STT errors are simulated only by persona wording ("Ngyuen", "Gary") and the fuzzy and phonetic matchers. The full Pipecat pipeline was exercised with text in place of audio (above). The WebRTC and ElevenLabs legs are unchanged by this work and were not re-run with a microphone.
 - **A single simulator model** (gpt-4o) plays every caller. A different simulator would shift absolute numbers. Comparisons across agent models and systems are fair because it is held fixed.
 - **Small N.** N=2 on the given catalog and N=1 on the variants. A case at 1/2 is a finding, not a rate. The per-case tables in each run's summary.md show the distribution.
 - **Self-authored data.** The generated catalogs reuse the given catalog's vocabulary plus 40 synthetic types.

@@ -3,7 +3,7 @@
 VENV := backend/.venv
 PYTHON := $(VENV)/bin/python
 
-.PHONY: help install run dev build clean db-up db-down db-reset ingest test eval eval-smoke
+.PHONY: help install run dev build clean db-up db-down db-reset ingest test eval eval-smoke smoke-pipeline
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -50,6 +50,9 @@ N ?= 3
 CASES ?=
 eval: ## Run the eval: CATALOG=given|all|<name> MODELS=gpt-4o,gpt-4o-mini N=3 CASES=<glob> BASELINE=1
 	cd backend && ../$(PYTHON) -m evals.run --catalog $(CATALOG) --models $(MODELS) --n $(N) $(if $(CASES),--cases '$(CASES)',) $(if $(BASELINE),--baseline,) $(if $(JUDGE),--llm-judge,)
+
+smoke-pipeline: ## The real Pipecat pipeline (FlowManager + LLM + tools), text in place of audio
+	cd backend && ../$(PYTHON) -m evals.pipeline_smoke
 
 eval-smoke: ## Cheap end-to-end check: given catalog, one model, N=1
 	$(MAKE) eval CATALOG=given MODELS=gpt-4o-mini N=1
