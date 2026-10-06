@@ -37,3 +37,7 @@ Thumbs.db
 .claude/
 .impeccable/
 skills-lock.json
+
+# ---- Local caches / eval runs ----
+backend/.cache/
+eval/runs/

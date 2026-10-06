@@ -16,10 +16,11 @@ reverse it**.
 | 006 | [Proximity: PostGIS, coarse caller area, no geocoder in the call path](006-proximity-postgis.md) | accepted |
 | 007 | [One fictional geography shared by data and tests](007-fictional-geography.md) | accepted |
 | 008 | [Scale hardening: namespaced identity, bounded results, degradation](008-scale-and-multitenant-hardening.md) | accepted |
-| 009 | [Alias table and ambiguity clusters now; semantic layer deferred](009-alias-first-embeddings-deferred.md) | accepted (revises 005's timing) |
-| 010 | [Ship the spine; reclassify the rest as designed-and-descoped](010-ship-the-spine.md) | accepted (supersedes scope in 001/005/006/007/008) |
+| 009 | [Alias table and ambiguity clusters now; semantic layer deferred](009-alias-first-embeddings-deferred.md) | revised by 013 (embeddings built; clusters stay primary) |
+| 010 | [Ship the spine; reclassify the rest as designed-and-descoped](010-ship-the-spine.md) | revised by 013 (Postgres, PostGIS, embeddings built) |
 | 011 | [No queue and no worker pool: the runner's one-pipeline-per-session](011-no-broker-runner-sessions.md) | accepted |
 | 012 | [Logging: stdout JSON as primary, rotating file behind a named volume, levels as the dial](012-logging-and-log-levels.md) | accepted |
+| 013 | [Build the store on Postgres: pgvector, PostGIS, gazetteer](013-postgres-pgvector-postgis-built.md) | accepted (overrides 010 §2, 009's timing) |
 
 Related: `approaches/` holds candidate solutions (options under consideration);
 `decisions/` holds choices made among them; `reviews/` holds external review of both.

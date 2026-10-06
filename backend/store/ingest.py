@@ -1,0 +1,246 @@
+#
+# Ingest: catalog bundle -> normalised Postgres tables, in one transaction.
+#
+#   python -m store.ingest given            # one bundle
+#   python -m store.ingest --all            # every bundle under catalogs/
+#   python -m store.ingest given --anchor today   # calendar starts this week (live demo)
+#
+# The payload is never modified. Every row carries catalog_version; re-ingesting the
+# same bundle replaces its rows, so ingest is idempotent.
+#
+
+import argparse
+import asyncio
+import json
+import sys
+from datetime import date, datetime, timedelta
+from itertools import combinations
+from pathlib import Path
+
+import asyncpg
+import numpy as np
+from dotenv import load_dotenv
+
+from . import calendar, embeddings
+from .bundle import Bundle, list_bundles, load_bundle, normalize
+from .db import apply_schema, dsn
+from .hours import HoursError, parse_hours
+from .lint import lint
+
+load_dotenv(Path(__file__).parent.parent / ".env", override=True)
+
+STRUCTURAL = [
+    "locations", "location_capabilities", "location_hours", "providers", "provider_languages",
+    "provider_locations", "appointment_types", "provider_appointment_types", "type_aliases",
+    "ambiguity_clusters", "type_embeddings", "patients", "referrals", "schedules", "appointments",
+]
+
+
+def search_name(name: str) -> str:
+    """'Dr. Maria Garcia' -> 'maria garcia': the honorific never helps a fuzzy match."""
+    n = normalize(name)
+    return n[3:] if n.startswith("dr ") else n
+
+
+def embed_texts(bundle: Bundle) -> list:
+    """(type_id, source, text) rows: every type name, plus every alias phrase per type."""
+    ids_by_name = bundle.type_ids_by_name()
+    rows = [(t["id"], "name", t["name"]) for t in bundle.catalog["appointment_types"]]
+    for phrase, names in bundle.aliases.items():
+        for n in names:
+            for tid in ids_by_name.get(normalize(n), []):
+                rows.append((tid, "alias", phrase))
+    return rows
+
+
+async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) -> dict:
+    cv = bundle.version
+    cat = bundle.catalog
+    anchor = anchor or bundle.anchor
+    ids_by_name = bundle.type_ids_by_name()
+    gz = {normalize(p["name"]): p for p in bundle.gazetteer["places"]}
+
+    async with conn.transaction():
+        old = await conn.fetchval("SELECT catalog_version FROM catalogs WHERE name = $1", bundle.name)
+        for v in {cv, old} - {None}:
+            for table in STRUCTURAL:
+                await conn.execute(f"DELETE FROM {table} WHERE catalog_version = $1", v)
+        await conn.execute("DELETE FROM catalogs WHERE name = $1 OR catalog_version = $2", bundle.name, cv)
+
+        # ---- gazetteer (shared) -------------------------------------------------
+        gv = bundle.gazetteer["version"]
+        await conn.execute("DELETE FROM gazetteer_places WHERE gazetteer_version = $1", gv)
+        await conn.executemany(
+            """INSERT INTO gazetteer_places (gazetteer_version, name, kind, aliases, search_names, geom)
+               VALUES ($1, $2, $3, $4, $5, ST_GeomFromText($6, 0))""",
+            [
+                (gv, p["name"], p["kind"], p["aliases"],
+                 [normalize(p["name"])] + [normalize(a) for a in p["aliases"]],
+                 "MULTIPOINT(" + ",".join(f"({x} {y})" for x, y in p["points"]) + ")")
+                for p in bundle.gazetteer["places"]
+            ],
+        )
+
+        # ---- locations ----------------------------------------------------------
+        loc_rows, hour_rows = [], []
+        for l in cat["locations"]:
+            m = bundle.places.get(l["id"])
+            place = gz.get(normalize(m["place"])) if m else None
+            xy = (m.get("at") if m else None) or (place["points"][0] if place else None)
+            loc_rows.append((cv, l["id"], l["name"], l["address"], l["city"], l["phone"], l["hours"],
+                             place["name"] if place else None,
+                             f"POINT({xy[0]} {xy[1]})" if xy else None))
+            try:
+                for d, intervals in parse_hours(l["hours"]).items():
+                    for a, b in intervals:
+                        hour_rows.append((cv, l["id"], d + 1, a, b))
+            except HoursError:
+                pass  # reported by lint
+        await conn.executemany(
+            """INSERT INTO locations (catalog_version, id, name, address, city, phone, hours_text, place, geom)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8, ST_GeomFromText($9, 0))""", loc_rows)
+        await conn.executemany(
+            "INSERT INTO location_hours VALUES ($1,$2,$3,$4,$5)", hour_rows)
+        await conn.executemany(
+            "INSERT INTO location_capabilities VALUES ($1,$2,$3)",
+            [(cv, l["id"], c) for l in cat["locations"] for c in sorted(set(l.get("capabilities", [])))])
+
+        # ---- providers ----------------------------------------------------------
+        await conn.executemany(
+            "INSERT INTO providers VALUES ($1,$2,$3,$4,$5,$6,$7)",
+            [(cv, p["id"], p["name"], search_name(p["name"]), p["title"], p["specialty"],
+              p["accepting_new_patients"]) for p in cat["providers"]])
+        await conn.executemany(
+            "INSERT INTO provider_languages VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
+            [(cv, p["id"], lang) for p in cat["providers"] for lang in p.get("languages", [])])
+        await conn.executemany(
+            "INSERT INTO provider_locations VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
+            [(cv, p["id"], lid) for p in cat["providers"] for lid in p["location_ids"]])
+        await conn.executemany(
+            "INSERT INTO provider_appointment_types VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
+            [(cv, p["id"], tid) for p in cat["providers"] for tid in p["appointment_type_ids"]])
+
+        # ---- types + meaning layer ---------------------------------------------------
+        alias_rows = sorted({
+            (cv, phrase, tid)
+            for phrase, names in bundle.aliases.items()
+            for n in names for tid in ids_by_name.get(normalize(n), [])
+        })
+        aliases_by_type: dict = {}
+        for _, phrase, tid in alias_rows:
+            aliases_by_type.setdefault(tid, []).append(phrase)
+        await conn.executemany(
+            """INSERT INTO appointment_types VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+                 setweight(to_tsvector('english', $3), 'A') ||
+                 setweight(to_tsvector('english', $4), 'B') ||
+                 setweight(to_tsvector('english', $9), 'C'))""",
+            [(cv, t["id"], t["name"], t["specialty"], t["duration_min"], t["requires_referral"],
+              t["new_patients_allowed"], t.get("required_capability") or None,
+              " ".join(aliases_by_type.get(t["id"], []))) for t in cat["appointment_types"]])
+        await conn.executemany("INSERT INTO type_aliases VALUES ($1,$2,$3)", alias_rows)
+
+        cluster_rows = []
+        for c in bundle.clusters:
+            members = [i for m in c["members"] for i in ids_by_name.get(normalize(m), [])]
+            if len(members) < 2:
+                continue  # the cluster does not exist in this catalog
+            hints = {i: c["hints"][m] for m in c["members"] for i in ids_by_name.get(normalize(m), []) if m in c["hints"]}
+            default = ids_by_name.get(normalize(c["safer_default"] or ""), [None])[0]
+            if default not in members:
+                default = None
+            cluster_rows.append((cv, c["id"], members, c["question"], json.dumps(hints), default))
+        await conn.executemany("INSERT INTO ambiguity_clusters VALUES ($1,$2,$3,$4,$5::jsonb,$6)", cluster_rows)
+
+        similarities = None
+        if embed:
+            texts = embed_texts(bundle)
+            vectors = await embeddings.embed(conn, [t for _, _, t in texts])
+            await conn.executemany(
+                "INSERT INTO type_embeddings VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING",
+                [(cv, tid, src, text, embeddings.MODEL, embeddings.MODEL_VERSION, vectors[text])
+                 for tid, src, text in texts])
+            names = {t["id"]: vectors[t["name"]] for t in cat["appointment_types"]}
+            similarities = {
+                (a, b): float(np.dot(names[a], names[b]))
+                for a, b in combinations(sorted(names), 2)
+            }
+
+        # ---- patients --------------------------------------------------------------
+        await conn.executemany(
+            "INSERT INTO patients VALUES ($1,'base',$2,$3,$4,$5)",
+            [(cv, p["id"], p["name"], search_name(p["name"]), date.fromisoformat(p["dob"])) for p in bundle.patients])
+        await conn.executemany(
+            "INSERT INTO referrals VALUES ($1,'base',$2,$3,$4) ON CONFLICT DO NOTHING",
+            [(cv, p["id"], tid, date.fromisoformat(r["expires"]))
+             for p in bundle.patients for r in p.get("referrals", [])
+             for tid in ids_by_name.get(normalize(r["type"]), [])])
+
+        # ---- calendar ----------------------------------------------------------------
+        cal = bundle.calendar
+        schedules = calendar.generate_schedules(cat, bundle.seed, cal.get("density", "normal"))
+        await conn.executemany("INSERT INTO schedules VALUES ($1,$2,$3,$4,$5,$6)",
+                               [(cv, *row) for row in schedules])
+        prebooked = calendar.generate_prebookings(cat, schedules, bundle.seed, anchor, cal.get("prebook_rate", 0.3))
+        await conn.executemany(
+            """INSERT INTO appointments (catalog_version, scope, confirmation, idempotency_key, patient_id,
+                   provider_id, location_id, appointment_type_id, starts_at, ends_at)
+               VALUES ($1, 'base', $2, $2, 'pat_mock', $3, $4, $5, $6, $7)""",
+            [(cv, f"PRE-{i:05d}", *row) for i, row in enumerate(prebooked)])
+
+        report = lint(bundle, similarities)
+        report["stats"] = {
+            "locations": len(cat["locations"]), "providers": len(cat["providers"]),
+            "appointment_types": len(cat["appointment_types"]), "aliases": len(alias_rows),
+            "clusters": len(cluster_rows), "schedules": len(schedules), "prebooked": len(prebooked),
+            "embedded_texts": len(embed_texts(bundle)) if embed else 0,
+        }
+        await conn.execute(
+            "INSERT INTO catalogs (name, catalog_version, source_path, calendar_seed, calendar_anchor, lint) VALUES ($1,$2,$3,$4,$5,$6::jsonb)",
+            bundle.name, cv, str(bundle.path), bundle.seed, anchor, json.dumps(report))
+    return report
+
+
+def _anchor(arg: str) -> date:
+    if arg == "today":
+        today = date.today()
+        return today - timedelta(days=today.weekday())  # Monday of this week
+    return date.fromisoformat(arg)
+
+
+async def main(argv=None) -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("bundles", nargs="*", help="bundle names under backend/catalogs/")
+    ap.add_argument("--all", action="store_true")
+    ap.add_argument("--anchor", help="calendar start: YYYY-MM-DD or 'today' (defaults to the bundle's)")
+    ap.add_argument("--no-embed", action="store_true")
+    ap.add_argument("--quiet", action="store_true")
+    args = ap.parse_args(argv)
+    names = list_bundles() if args.all else (args.bundles or ["given"])
+    embeddings.load_file_cache()
+    conn = await asyncpg.connect(dsn())
+    await apply_schema(conn)
+    from pgvector.asyncpg import register_vector
+    await register_vector(conn)
+    try:
+        for name in names:
+            bundle = load_bundle(name)
+            started = datetime.now()
+            report = await ingest(conn, bundle, _anchor(args.anchor) if args.anchor else None, not args.no_embed)
+            ms = (datetime.now() - started).total_seconds() * 1000
+            print(f"[{name}] catalog_version={bundle.version} ingested in {ms:.0f} ms  {report['stats']}")
+            if not args.quiet:
+                for key, n in report["counts"].items():
+                    if n:
+                        items = report[key]
+                        print(f"  {key}: {n}")
+                        for item in items[:6]:
+                            print(f"    - {item}")
+                        if n > 6:
+                            print(f"    ... {n - 6} more")
+    finally:
+        embeddings.save_file_cache()
+        await conn.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main(sys.argv[1:]))

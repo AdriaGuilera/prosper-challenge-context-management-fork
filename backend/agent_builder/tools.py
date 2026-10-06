@@ -1,235 +1,588 @@
 #
-# Catalog tools — the lookups a node can expose to the LLM, by name.
+# Catalog tools: the lookups a node can expose to the LLM, by name.
 #
 # A node lists tool names in its `tools` field; AgentBuilder turns each into a
-# FlowsFunctionSchema that answers WITHOUT a transition. Every tool returns a
-# small, bounded, answer-shaped result that carries the columns needed to tell
-# similar candidates apart — never the whole catalog.
+# FlowsFunctionSchema that answers WITHOUT a transition. Every tool runs over the
+# Postgres store (decision 013), asynchronously (decision 011), and returns a
+# bounded, answer-shaped result (decision 008):
 #
-# This is the minimal in-memory version over catalog.json. The SQLite store in
-# decisions 001/010 replaces the bodies, not the contract.
+#   {total, shown, truncated, options[], ...}   never a bare row array, never a silent cut
+#
+# The model never sets a limit, never passes patient state it could get wrong, and
+# never authors an idempotency key or a catalog version: the server owns all four.
 #
 
 import hashlib
 import json
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from pathlib import Path
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional
 
-CATALOG_PATH = Path(__file__).parent.parent / "data" / "catalog.json"
+from store import db
+from store.bundle import GAZETTEER_PATH, normalize
+from store.geo import resolve_place
+from store.hours import DAY_NAMES, summarize
+from store.search import rank_types
+from store.slots import free_slots, spoken
+
 MAX_RESULTS = 5
+MAX_SLOT_OPTIONS = 3
+_GZ = json.loads(GAZETTEER_PATH.read_text())
+NEAR_KM, FAR_KM = _GZ["near_km"], _GZ["far_km"]
 
 
-def _load() -> dict:
-    data = json.loads(CATALOG_PATH.read_text())
-    return {
-        "locations": {l["id"]: l for l in data["locations"]},
-        "providers": {p["id"]: p for p in data["providers"]},
-        "types": {t["id"]: t for t in data["appointment_types"]},
-    }
+@dataclass
+class ToolContext:
+    """Per-call state: which catalog, which calendar scope, what time it is, and what
+    this conversation has already established (patient, slots offered)."""
+
+    catalog: str = "given"
+    scope: str = "live"                                  # bookings land here; 'base' is shared
+    clock: Callable[[], datetime] = datetime.now
+    use_vectors: bool = True
+    session: dict = field(default_factory=dict)
+    cv: Optional[str] = None
+    enums: dict = field(default_factory=dict)
+
+    async def prepare(self) -> None:
+        if self.cv:
+            return
+        pool = await db.pool()
+        async with pool.acquire() as conn:
+            self.cv = await conn.fetchval("SELECT catalog_version FROM catalogs WHERE name = $1", self.catalog)
+            if not self.cv:
+                raise RuntimeError(f"Catalog '{self.catalog}' is not ingested. Run `make ingest`.")
+            self.enums = {
+                "specialty": [r[0] for r in await conn.fetch(
+                    "SELECT DISTINCT specialty FROM (SELECT specialty FROM providers WHERE catalog_version = $1 "
+                    "UNION SELECT specialty FROM appointment_types WHERE catalog_version = $1) s ORDER BY 1", self.cv)],
+                "capability": [r[0] for r in await conn.fetch(
+                    "SELECT DISTINCT capability FROM location_capabilities WHERE catalog_version = $1 ORDER BY 1", self.cv)],
+                "language": [r[0] for r in await conn.fetch(
+                    "SELECT DISTINCT language FROM provider_languages WHERE catalog_version = $1 ORDER BY 1", self.cv)],
+            }
+
+    @property
+    def scopes(self) -> list:
+        return ["base", self.scope]
+
+    def now(self) -> datetime:
+        return self.clock().replace(second=0, microsecond=0)
 
 
-CATALOG = _load()
+def _bounded(options: list, total: Optional[int] = None, limit: int = MAX_RESULTS, **extra) -> dict:
+    total = len(options) if total is None else total
+    shown = options[:limit]
+    return {"total": total, "shown": len(shown), "truncated": total > len(shown), **extra, "options": shown}
 
 
-def _words(text: str) -> set:
-    return {w for w in "".join(c.lower() if c.isalnum() else " " for c in text).split() if w}
+def _today(ctx: ToolContext) -> str:
+    return ctx.now().strftime("%A %B %-d, %Y")
 
 
-def _score(query: str, *fields: str) -> int:
-    q = _words(query)
-    return sum(len(q & _words(f)) for f in fields if f)
+# ---- patients ---------------------------------------------------------------
+
+_DOB_FORMATS = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%B %d %Y", "%b %d %Y", "%d %B %Y", "%B %d, %Y", "%m-%d-%Y"]
 
 
-def _bounded(rows: list, key: str) -> dict:
-    """Cap a result list and say so — no silent truncation."""
-    return {key: rows[:MAX_RESULTS], "total_matches": len(rows), "truncated": len(rows) > MAX_RESULTS}
-
-
-def _type_row(t: dict) -> dict:
-    return {
-        "id": t["id"],
-        "name": t["name"],
-        "specialty": t["specialty"],
-        "duration_min": t["duration_min"],
-        "requires_referral": t["requires_referral"],
-        "new_patients_allowed": t["new_patients_allowed"],
-        "required_capability": t.get("required_capability"),
-    }
-
-
-def _provider_row(p: dict) -> dict:
-    return {
-        "id": p["id"],
-        "name": p["name"],
-        "title": p["title"],
-        "specialty": p["specialty"],
-        "accepting_new_patients": p["accepting_new_patients"],
-        "languages": p["languages"],
-        "locations": [CATALOG["locations"][l]["name"] for l in p["location_ids"]],
-    }
-
-
-def _location_row(l: dict) -> dict:
-    return {
-        "id": l["id"],
-        "name": l["name"],
-        "address": f'{l["address"]}, {l["city"]}',
-        "phone": l["phone"],
-        "hours": l["hours"],
-        "capabilities": l["capabilities"],
-    }
-
-
-def _bookable_locations(provider: dict, appt_type: dict) -> list:
-    cap = appt_type.get("required_capability")
-    return [
-        lid
-        for lid in provider["location_ids"]
-        if cap is None or cap in CATALOG["locations"][lid]["capabilities"]
-    ]
-
-
-def _booking_problems(provider_id: str, location_id: str, type_id: str, is_new_patient: bool, has_referral: bool) -> list:
-    """The commit-time check: every catalog rule, enforced in code."""
-    p = CATALOG["providers"].get(provider_id)
-    l = CATALOG["locations"].get(location_id)
-    t = CATALOG["types"].get(type_id)
-    if not (p and l and t):
-        return ["Unknown provider, location or appointment type id."]
-    problems = []
-    if location_id not in p["location_ids"]:
-        problems.append(f'{p["name"]} does not practise at {l["name"]}.')
-    if type_id not in p["appointment_type_ids"]:
-        problems.append(f'{p["name"]} does not offer {t["name"]}.')
-    cap = t.get("required_capability")
-    if cap and cap not in l["capabilities"]:
-        problems.append(f'{l["name"]} has no {cap} for {t["name"]}.')
-    if t["requires_referral"] and not has_referral:
-        problems.append(f'{t["name"]} needs a referral on file.')
-    if is_new_patient and not t["new_patients_allowed"]:
-        problems.append(f'{t["name"]} is not open to new patients.')
-    if is_new_patient and not p["accepting_new_patients"]:
-        problems.append(f'{p["name"]} is not accepting new patients.')
-    return problems
-
-
-# ---- tools ------------------------------------------------------------------
-
-
-def find_appointment_types(args: dict) -> dict:
-    query = args.get("query", "")
-    specialty = (args.get("specialty") or "").lower()
-    rows = []
-    for t in CATALOG["types"].values():
-        if specialty and t["specialty"].lower() != specialty:
+def parse_dob(text: str) -> Optional[date]:
+    text = re.sub(r"(\d)(st|nd|rd|th)\b", r"\1", (text or "").strip())
+    for fmt in _DOB_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
             continue
-        s = _score(query, t["name"], t["specialty"])
-        if s or (specialty and not query):
-            rows.append((s, t))
-    rows.sort(key=lambda r: -r[0])
-    return _bounded([_type_row(t) for _, t in rows], "appointment_types")
+    return None
 
 
-def find_providers(args: dict) -> dict:
-    name = args.get("name") or ""
-    specialty = (args.get("specialty") or "").lower()
+async def lookup_patient(args: dict, ctx: ToolContext, conn) -> dict:
+    name = (args.get("full_name") or "").strip()
+    dob = parse_dob(args.get("date_of_birth", ""))
+    if not name or not dob:
+        return {"error": "Need the caller's full name and a date of birth with day, month and year."}
+    q = normalize(name)
+    rows = await conn.fetch(
+        """SELECT id, full_name, scope, name_score($3, search_name) AS sim FROM patients
+           WHERE catalog_version = $1 AND scope = ANY($2) AND date_of_birth = $4
+             AND name_score($3, search_name) >= 0.75
+           ORDER BY sim DESC LIMIT 2""",
+        ctx.cv, ctx.scopes, q, dob)
+    today = ctx.now().date()
+    if not rows:
+        ctx.session["patient"] = {"id": None, "name": name, "dob": dob.isoformat(), "is_new": True, "referrals": []}
+        return {
+            "found": False, "patient_status": "new", "today": _today(ctx),
+            "note": "No record under that name and date of birth, so treat them as a NEW patient. "
+                    "If they say they've been here before, check the spelling of their name once.",
+        }
+    p = rows[0]
+    refs = await conn.fetch(
+        """SELECT r.appointment_type_id, t.name, r.expires_on FROM referrals r
+           JOIN appointment_types t ON t.catalog_version = r.catalog_version AND t.id = r.appointment_type_id
+           WHERE r.catalog_version = $1 AND r.scope = ANY($2) AND r.patient_id = $3 AND r.expires_on >= $4
+           ORDER BY t.name""",
+        ctx.cv, ctx.scopes, p["id"], today)
+    ctx.session["patient"] = {"id": p["id"], "name": p["full_name"], "dob": dob.isoformat(), "is_new": False,
+                              "referrals": [r["appointment_type_id"] for r in refs]}
+    return {
+        "found": True, "patient_status": "existing", "name": p["full_name"], "today": _today(ctx),
+        "referrals_on_file": [r["name"] for r in refs],
+    }
+
+
+# ---- appointment types ----------------------------------------------------------
+
+
+async def _type_rows(conn, ctx: ToolContext, ids: list) -> dict:
+    rows = await conn.fetch(
+        """SELECT t.*, EXISTS (SELECT 1 FROM bookable b WHERE b.catalog_version = t.catalog_version
+                                 AND b.appointment_type_id = t.id) AS offered
+           FROM appointment_types t WHERE t.catalog_version = $1 AND t.id = ANY($2)""", ctx.cv, ids)
+    return {r["id"]: r for r in rows}
+
+
+def _patient_block(t, patient: Optional[dict]) -> Optional[str]:
+    if not patient:
+        return None
+    if t["requires_referral"] and t["id"] not in patient["referrals"]:
+        return "needs a referral, and none is on file for this patient"
+    if patient["is_new"] and not t["new_patients_allowed"]:
+        return "not open to new patients"
+    return None
+
+
+def _type_option(t, hint: Optional[str], patient: Optional[dict]) -> dict:
+    opt = {
+        "appointment_type_id": t["id"], "name": t["name"], "specialty": t["specialty"],
+        "duration_min": t["duration_min"], "needs_referral": t["requires_referral"],
+        "open_to_new_patients": t["new_patients_allowed"],
+        "needs_capability": t["required_capability"], "offered_here": t["offered"],
+    }
+    if hint:
+        opt["pick_if_caller_wants"] = hint
+    block = _patient_block(t, patient)
+    if block:
+        opt["blocked_for_this_patient"] = block
+    if not t["offered"]:
+        opt["note"] = "No provider here offers this, so it cannot be booked."
+    return opt
+
+
+async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
+    query = (args.get("query") or "").strip()
+    if not query:
+        return {"error": "Pass the caller's own words as query."}
+    specialty, provider_id, location_id = args.get("specialty"), args.get("provider_id"), args.get("location_id")
+    candidates = [r["id"] for r in await conn.fetch(
+        """SELECT t.id FROM appointment_types t WHERE t.catalog_version = $1
+             AND ($2::text IS NULL OR t.specialty = $2)
+             AND (($3::text IS NULL AND $4::text IS NULL) OR EXISTS (
+                  SELECT 1 FROM bookable b WHERE b.catalog_version = $1 AND b.appointment_type_id = t.id
+                    AND ($3::text IS NULL OR b.provider_id = $3) AND ($4::text IS NULL OR b.location_id = $4)))""",
+        ctx.cv, specialty, provider_id, location_id)]
+    ranking = await rank_types(conn, ctx.cv, query, candidates, ctx.use_vectors)
+    if ranking.status == "none":
+        return _bounded([], status="no_match",
+                        instruction="Nothing matched. Ask the caller to describe the visit differently, "
+                                    "or say what kinds of visits are available in a specialty.")
+    hints = json.loads(ranking.cluster["member_hints"]) if ranking.cluster else {}
+    first = list(ranking.candidates) if ranking.status in ("ask", "match") else []
+    order = first + [tid for tid, _, _ in ranking.ranked if tid not in first]
+    rows = await _type_rows(conn, ctx, order[:MAX_RESULTS])
+    patient = ctx.session.get("patient")
+    options = [_type_option(rows[tid], hints.get(tid), patient) for tid in order[:MAX_RESULTS] if tid in rows]
+    out = _bounded(options, total=len(ranking.ranked))
+    if ranking.status in ("ask", "match") and all(not rows[c]["offered"] for c in ranking.candidates if c in rows):
+        names = [rows[c]["name"] for c in ranking.candidates if c in rows]
+        return {"status": "not_offered", **out, "not_offered": names,
+                "instruction": "The clinic doesn't offer this: no provider here does it. Say so plainly. "
+                               "Don't offer a different visit as if it were the same thing."}
+    if ranking.status == "match":
+        out = {"status": "match", **out, "instruction": "The first option is the match. Confirm it in plain words."}
+    elif ranking.status == "ask":
+        names = [rows[t]["name"] for t in ranking.candidates if t in rows]
+        default = ranking.cluster["safer_default"] if ranking.cluster else None
+        out = {
+            "status": "ask", **out, "choose_between": names,
+            "question": ranking.cluster["question"] if ranking.cluster else None,
+            "safer_default": rows[default]["name"] if default in rows else None,
+            "instruction": "These are easy to confuse. Ask the question (in the caller's words, not the catalog's) "
+                           "and let their answer pick, using pick_if_caller_wants. Do not choose for them. If they "
+                           "truly can't say, propose the safer_default and get a clear yes.",
+        }
+    else:
+        out = {"status": "unsure", **out,
+               "instruction": "Low confidence. Ask the caller what the visit is for in other words, "
+                              "or offer the closest one or two options as a question."}
+    return out
+
+
+# ---- providers ------------------------------------------------------------------
+
+_HONORIFIC = re.compile(r"^(dr|doctor|doc)\s+")
+
+
+async def find_providers(args: dict, ctx: ToolContext, conn) -> dict:
+    q = _HONORIFIC.sub("", normalize(args.get("name") or ""))
+    specialty = args.get("specialty")
     type_id = args.get("appointment_type_id")
     location_id = args.get("location_id")
-    language = (args.get("language") or "").lower()
-    if not (name or specialty or type_id or location_id):
-        return {"error": "Give at least one of name, specialty, appointment_type_id or location_id."}
-    rows = []
-    for p in CATALOG["providers"].values():
-        if specialty and p["specialty"].lower() != specialty:
-            continue
-        if type_id and type_id not in p["appointment_type_ids"]:
-            continue
-        if location_id and location_id not in p["location_ids"]:
-            continue
-        if language and language not in [x.lower() for x in p["languages"]]:
-            continue
-        if name and not _score(name, p["name"]):
-            continue
-        rows.append((_score(name, p["name"]) if name else 0, p))
-    rows.sort(key=lambda r: -r[0])
-    return _bounded([_provider_row(p) for _, p in rows], "providers")
+    language = args.get("language")
+    accepting = args.get("accepting_new_patients")
+    if not (q or specialty or type_id or location_id or language):
+        return {"error": "Give at least one of name, specialty, appointment_type_id, location_id or language."}
+    rows = await conn.fetch(
+        """SELECT p.id, p.name, p.title, p.specialty, p.accepting_new_patients, p.search_name,
+                  CASE WHEN $2 = '' THEN 1.0 ELSE name_score($2, p.search_name) END AS score,
+                  (SELECT json_agg(json_build_object('location_id', l.id, 'name', l.name) ORDER BY l.name)
+                     FROM provider_locations pl JOIN locations l
+                       ON l.catalog_version = pl.catalog_version AND l.id = pl.location_id
+                    WHERE pl.catalog_version = p.catalog_version AND pl.provider_id = p.id) AS locations,
+                  (SELECT array_agg(language ORDER BY language) FROM provider_languages pg
+                    WHERE pg.catalog_version = p.catalog_version AND pg.provider_id = p.id) AS languages
+           FROM providers p
+           WHERE p.catalog_version = $1
+             AND ($2 = '' OR name_score($2, p.search_name) >= 0.6)
+             AND ($3::text IS NULL OR p.specialty = $3)
+             AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM bookable b WHERE b.catalog_version = $1
+                    AND b.provider_id = p.id AND b.appointment_type_id = $4
+                    AND ($5::text IS NULL OR b.location_id = $5)))
+             AND ($5::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog_version = $1
+                    AND pl.provider_id = p.id AND pl.location_id = $5))
+             AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM provider_languages pg WHERE pg.catalog_version = $1
+                    AND pg.provider_id = p.id AND lower(pg.language) = lower($6)))
+             AND ($7::bool IS NULL OR p.accepting_new_patients = $7)
+           ORDER BY score DESC, p.name, p.id""",
+        ctx.cv, q, specialty, type_id, location_id, language, accepting)
+    if q:
+        # exact full name, then exact surname/first-name word, then fuzzy (misheard names)
+        exact = [r for r in rows if r["search_name"] == q]
+        word = [r for r in rows if q in r["search_name"].split()]
+        rows = exact or word or rows
+    by_specialty: dict = {}
+    for r in rows:
+        by_specialty[r["specialty"]] = by_specialty.get(r["specialty"], 0) + 1
+    options = [{
+        "provider_id": r["id"], "name": r["name"], "title": r["title"], "specialty": r["specialty"],
+        "accepting_new_patients": r["accepting_new_patients"], "languages": r["languages"] or [],
+        "locations": json.loads(r["locations"]) if isinstance(r["locations"], str) else (r["locations"] or []),
+    } for r in rows]
+    out = _bounded(options, by_specialty=by_specialty)
+    if q and len(rows) > 1:
+        differs = [k for k in ("specialty", "title", "locations", "languages", "accepting_new_patients")
+                   if len({json.dumps(o[k], sort_keys=True) for o in options}) > 1]
+        out = {"status": "ask", **out, "distinguish_by": differs,
+               "instruction": f"{len(rows)} providers match that name. Ask which one, using what tells them apart "
+                              f"({', '.join(differs) or 'their full name'}). Never assume."}
+    elif q and len(rows) == 1 and rows[0]["search_name"] != q and q not in rows[0]["search_name"].split():
+        out = {"status": "confirm", **out,
+               "instruction": "Closest name only, not an exact match. Confirm the name with the caller."}
+    elif not rows:
+        out = {"status": "no_match", **out,
+               "instruction": "No provider by that name. Say so; don't guess. Offer to search by specialty."}
+    return out
 
 
-def find_locations(args: dict) -> dict:
-    query = args.get("query") or ""
+# ---- locations --------------------------------------------------------------------
+
+
+def _week(rows) -> dict:
+    week: dict = {}
+    for r in rows:
+        week.setdefault(r["weekday"] - 1, []).append((r["opens"], r["closes"]))
+    return week
+
+
+async def _place_point(conn, text: str) -> tuple:
+    """(point, problem dict or None)."""
+    res = await resolve_place(conn, text)
+    if res.status == "resolved":
+        return res, None
+    if res.status == "ambiguous":
+        if res.place:  # a street through several areas
+            areas = [c["area"] for c in res.candidates]
+            return res, {"status": "ask_place", "place": res.place, "areas": areas,
+                         "instruction": f"{res.place} runs through {' and '.join(areas)}. Ask which part they mean."}
+        return res, {"status": "ask_place", "candidates": [c["name"] for c in res.candidates],
+                     "instruction": "Several places sound like that. Ask which one they mean."}
+    return res, {"status": "unknown_place",
+                 "instruction": "That place isn't on our map. Ask for a nearby neighbourhood or landmark, or offer the list of locations."}
+
+
+async def find_locations(args: dict, ctx: ToolContext, conn) -> dict:
+    name = normalize(args.get("name") or "")
+    near = args.get("near")
     capability = args.get("capability")
-    rows = []
-    for l in CATALOG["locations"].values():
-        if capability and capability not in l["capabilities"]:
-            continue
-        if query and not _score(query, l["name"], l["city"], l["address"]):
-            continue
-        rows.append(l)
-    return _bounded([_location_row(l) for l in rows], "locations")
-
-
-def _mock_slots(provider_id: str, location_id: str, type_id: str, count: int = 3) -> list:
-    """Deterministic fake availability: same inputs, same slots, weekdays 8-17."""
-    seed = int(hashlib.sha256(f"{provider_id}{location_id}{type_id}".encode()).hexdigest(), 16)
-    day = date.today() + timedelta(days=1 + seed % 3)
-    slots = []
-    while len(slots) < count:
-        if day.weekday() < 5:
-            hour = 8 + (seed >> len(slots) * 4) % 9
-            slots.append(datetime(day.year, day.month, day.day, hour))
-        day += timedelta(days=1 + (seed >> (len(slots) + 8)) % 2)
-    return slots
-
-
-def check_availability(args: dict) -> dict:
+    open_on = args.get("open_on")
     type_id = args.get("appointment_type_id")
     provider_id = args.get("provider_id")
-    location_id = args.get("location_id")
-    t = CATALOG["types"].get(type_id)
-    if not t:
-        return {"error": f"Unknown appointment type '{type_id}'. Look it up first."}
-    providers = [CATALOG["providers"][provider_id]] if provider_id in CATALOG["providers"] else [
-        p for p in CATALOG["providers"].values() if type_id in p["appointment_type_ids"]
-    ]
+    point, place_note = None, None
+    if near:
+        res, problem = await _place_point(conn, near)
+        if problem:
+            return {**problem, "total": 0, "shown": 0, "truncated": False, "options": []}
+        point = res.point
+        if res.confusable_with:
+            place_note = f"Heard '{res.place}', which sounds like {', '.join(res.confusable_with)}. Confirm if unsure."
+    weekday = (DAY_NAMES.index(open_on) + 1) if open_on in DAY_NAMES else None
+    rows = await conn.fetch(
+        """SELECT l.id, l.name, l.address, l.city, l.phone, l.place,
+                  CASE WHEN $2::float8 IS NULL THEN NULL
+                       ELSE ST_Distance(l.geom, ST_SetSRID(ST_MakePoint($2, $3), 0)) END AS km,
+                  CASE WHEN $8 = '' THEN 1.0 ELSE greatest(similarity(lower(l.name), $8),
+                       word_similarity($8, lower(l.name)), similarity(lower(coalesce(l.place, '')), $8)) END AS score,
+                  (SELECT array_agg(capability ORDER BY capability) FROM location_capabilities c
+                    WHERE c.catalog_version = l.catalog_version AND c.location_id = l.id) AS capabilities
+           FROM locations l
+           WHERE l.catalog_version = $1
+             AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM location_capabilities c WHERE c.catalog_version = $1
+                    AND c.location_id = l.id AND c.capability = $4))
+             AND ($5::int IS NULL OR EXISTS (SELECT 1 FROM location_hours h WHERE h.catalog_version = $1
+                    AND h.location_id = l.id AND h.weekday = $5))
+             AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM bookable b WHERE b.catalog_version = $1
+                    AND b.location_id = l.id AND b.appointment_type_id = $6))
+             AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog_version = $1
+                    AND pl.location_id = l.id AND pl.provider_id = $7))
+             AND ($8 = '' OR greatest(similarity(lower(l.name), $8), word_similarity($8, lower(l.name)),
+                    similarity(lower(coalesce(l.place, '')), $8)) >= 0.4)
+           ORDER BY CASE WHEN $2::float8 IS NULL THEN 0 ELSE l.geom <-> ST_SetSRID(ST_MakePoint($2, $3), 0) END,
+                    score DESC, l.name""",
+        ctx.cv, point[0] if point else None, point[1] if point else None, capability, weekday, type_id,
+        provider_id, name)
+    hours = await conn.fetch(
+        "SELECT location_id, weekday, opens, closes FROM location_hours WHERE catalog_version = $1 AND location_id = ANY($2) ORDER BY opens",
+        ctx.cv, [r["id"] for r in rows])
+    by_loc: dict = {}
+    for h in hours:
+        by_loc.setdefault(h["location_id"], []).append(h)
+    by_capability: dict = {}
     options = []
-    for p in providers:
-        if type_id not in p["appointment_type_ids"]:
-            continue
-        for lid in _bookable_locations(p, t):
-            if location_id and lid != location_id:
-                continue
-            options.append({
-                "provider_id": p["id"],
-                "provider": f'{p["name"]}, {p["title"]}',
-                "location_id": lid,
-                "location": CATALOG["locations"][lid]["name"],
-                "slots": _mock_slots(p["id"], lid, type_id),
-            })
-    options.sort(key=lambda o: o["slots"][0])
-    for o in options:
-        o["slots"] = [s.strftime("%A %b %d, %-I:%M %p") for s in o["slots"]]
-    if not options:
-        return {"error": "No bookable provider and location for that combination."}
-    return _bounded(options, "options")
+    for r in rows:
+        for c in r["capabilities"] or []:
+            by_capability[c] = by_capability.get(c, 0) + 1
+        week = _week(by_loc.get(r["id"], []))
+        opt = {
+            "location_id": r["id"], "name": r["name"], "address": f"{r['address']}, {r['city']}", "phone": r["phone"],
+            "hours": summarize(week) if week else "hours unavailable", "capabilities": r["capabilities"] or [],
+        }
+        if r["km"] is not None:
+            opt["distance_km"] = round(r["km"], 1)
+        options.append(opt)
+    out = _bounded(options, by_capability=by_capability)
+    if point is not None and options:
+        d0 = options[0]["distance_km"]
+        if d0 > FAR_KM:
+            out["note"] = f"Nothing near {near}: the closest location is {options[0]['name']}, about {d0:.0f} km away."
+        elif len(options) > 1 and abs(options[1]["distance_km"] - d0) < 0.05:
+            out["note"] = f"{options[0]['name']} and {options[1]['name']} are equally close to {near}. Offer both."
+    if place_note:
+        out["place_check"] = place_note
+    if open_on and weekday is None:
+        out["error"] = "open_on must be a full weekday name like 'Saturday'."
+    elif open_on and not options:
+        out["note"] = f"No location matching that is open on {open_on}."
+    return out
 
 
-def book_appointment(args: dict) -> dict:
-    problems = _booking_problems(
-        args.get("provider_id", ""),
-        args.get("location_id", ""),
-        args.get("appointment_type_id", ""),
-        bool(args.get("is_new_patient", False)),
-        bool(args.get("has_referral", False)),
-    )
-    if problems:
-        return {"booked": False, "problems": problems}
-    ref = hashlib.sha1(json.dumps(args, sort_keys=True).encode()).hexdigest()[:6].upper()
-    return {"booked": True, "confirmation": f"PR-{ref}", **{k: args[k] for k in ("patient_name", "slot") if k in args}}
+# ---- availability -------------------------------------------------------------------
 
 
-# ---- registry ---------------------------------------------------------------
+async def _patient_state(ctx: ToolContext) -> tuple:
+    p = ctx.session.get("patient")
+    if not p:
+        return None, False, []
+    return p, p["is_new"], p["referrals"]
+
+
+async def _explain_no_pairs(conn, ctx: ToolContext, t, provider_id, location_id, patient) -> list:
+    """Why nothing is bookable: plain reasons for the caller, from the same facts the relation uses."""
+    reasons = []
+    structural = await conn.fetch(
+        """SELECT provider_id, location_id FROM bookable WHERE catalog_version = $1 AND appointment_type_id = $2
+             AND ($3::text IS NULL OR provider_id = $3) AND ($4::text IS NULL OR location_id = $4)""",
+        ctx.cv, t["id"], provider_id, location_id)
+    if not structural:
+        anywhere = await conn.fetchval(
+            "SELECT count(*) FROM bookable WHERE catalog_version = $1 AND appointment_type_id = $2", ctx.cv, t["id"])
+        if not anywhere:
+            reasons.append(f"Nobody here offers {t['name']}.")
+        elif provider_id:
+            reasons.append(f"That provider can't do {t['name']}" + (" at that location." if location_id else "."))
+        elif location_id:
+            reasons.append(f"{t['name']} isn't available at that location"
+                           + (f" (it needs {t['required_capability']})." if t["required_capability"] else "."))
+        return reasons
+    if patient:
+        if t["requires_referral"] and t["id"] not in patient["referrals"]:
+            reasons.append(f"{t['name']} needs a referral on file, and this patient has none for it.")
+        if patient["is_new"] and not t["new_patients_allowed"]:
+            reasons.append(f"{t['name']} isn't open to new patients.")
+        if patient["is_new"] and t["new_patients_allowed"]:
+            reasons.append("The matching providers aren't accepting new patients.")
+    return reasons or ["No bookable combination."]
+
+
+async def check_availability(args: dict, ctx: ToolContext, conn) -> dict:
+    type_id = args.get("appointment_type_id")
+    provider_id, location_id, near = args.get("provider_id"), args.get("location_id"), args.get("near")
+    t = await conn.fetchrow("SELECT * FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
+    if not t:
+        return {"error": f"Unknown appointment type '{type_id}'. Look it up with search_appointment_types first."}
+    patient, is_new, referrals = await _patient_state(ctx)
+    pairs = await conn.fetch(
+        """SELECT provider_id, location_id FROM bookable_for($1, $2, $3)
+           WHERE appointment_type_id = $4 AND ($5::text IS NULL OR provider_id = $5)
+             AND ($6::text IS NULL OR location_id = $6)""",
+        ctx.cv, bool(is_new), referrals if patient else [t["id"]], type_id, provider_id, location_id)
+    if not pairs:
+        reasons = await _explain_no_pairs(conn, ctx, t, provider_id, location_id, patient)
+        out = {"status": "not_bookable", "reasons": reasons, "total": 0, "shown": 0, "truncated": False, "options": []}
+        if provider_id or location_id:
+            alt = await conn.fetchval(
+                "SELECT count(*) FROM bookable_for($1, $2, $3) WHERE appointment_type_id = $4",
+                ctx.cv, bool(is_new), referrals if patient else [t["id"]], type_id)
+            if alt:
+                out["alternatives"] = f"{alt} other provider/location combinations can do {t['name']} for this patient. Offer to look without the preference."
+        return out
+
+    now = ctx.now()
+    after = args.get("on_or_after")
+    if after:
+        try:
+            now = max(now, datetime.combine(date.fromisoformat(after), datetime.min.time()))
+        except ValueError:
+            return {"error": "on_or_after must be YYYY-MM-DD."}
+    point = None
+    if near:
+        res, problem = await _place_point(conn, near)
+        if problem:
+            return {**problem, "total": 0, "shown": 0, "truncated": False, "options": []}
+        point = res.point
+    pair_list = [(r["provider_id"], r["location_id"]) for r in pairs]
+    slots = await free_slots(conn, ctx.cv, pair_list, t["duration_min"], now, ctx.scopes,
+                             args.get("part_of_day") or "any")
+    meta = {r["id"]: r for r in await conn.fetch(
+        """SELECT l.id, l.name, CASE WHEN $3::float8 IS NULL THEN NULL
+                  ELSE ST_Distance(l.geom, ST_SetSRID(ST_MakePoint($3, $4), 0)) END AS km
+           FROM locations l WHERE l.catalog_version = $1 AND l.id = ANY($2)""",
+        ctx.cv, list({l for _, l in pair_list}), point[0] if point else None, point[1] if point else None)}
+    provs = {r["id"]: r for r in await conn.fetch(
+        "SELECT id, name, title, specialty FROM providers WHERE catalog_version = $1 AND id = ANY($2)",
+        ctx.cv, list({p for p, _ in pair_list}))}
+    grouped: dict = {}
+    for p, l, s in slots:
+        grouped.setdefault((p, l), []).append(s)
+    if not grouped:
+        return {"status": "no_openings", "total": 0, "shown": 0, "truncated": False, "options": [],
+                "instruction": "No openings in the next three weeks for this. Offer a different provider, location or time of day."}
+    if point is not None:
+        order = sorted(grouped, key=lambda k: (meta[k[1]]["km"], grouped[k][0], k))
+    else:
+        order = sorted(grouped, key=lambda k: (grouped[k][0], k))
+    today = ctx.now().date()
+    options = []
+    for p, l in order:
+        opt = {
+            "provider_id": p, "provider": f"{provs[p]['name']}, {provs[p]['title']}", "specialty": provs[p]["specialty"],
+            "location_id": l, "location": meta[l]["name"],
+            "slots": [{"start": s.isoformat(timespec="minutes"), "say": spoken(s, today)} for s in grouped[(p, l)]],
+        }
+        if meta[l]["km"] is not None:
+            opt["distance_km"] = round(meta[l]["km"], 1)
+        options.append(opt)
+    out = _bounded(options, limit=MAX_SLOT_OPTIONS, status="ok", today=_today(ctx),
+                   appointment_type=t["name"], duration_min=t["duration_min"])
+    offered = ctx.session.setdefault("offered", set())
+    for o in out["options"]:
+        for s in o["slots"]:
+            offered.add((o["provider_id"], o["location_id"], type_id, s["start"]))
+    sites = {o["location_id"] for o in options}
+    if provider_id and not location_id and len(sites) > 1:
+        out["instruction"] = "This provider works at several of these locations. Confirm which location before booking."
+    if not patient:
+        out["warning"] = "Patient not looked up yet: referral and new-patient rules were not applied. Look them up before booking."
+    if point is not None and options and options[0].get("distance_km", 0) > FAR_KM:
+        out["note"] = f"Nothing near {near}; these are the closest."
+    return out
+
+
+# ---- booking -------------------------------------------------------------------------
+
+
+def _idempotency_key(cv: str, scope: str, patient: dict, type_id: str, provider_id: str, location_id: str, start: str) -> str:
+    who = patient.get("id") or f"{normalize(patient['name'])}|{patient['dob']}"
+    raw = "|".join([cv, scope, who, type_id, provider_id, location_id, start])
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+async def book_appointment(args: dict, ctx: ToolContext, conn) -> dict:
+    type_id, provider_id = args.get("appointment_type_id"), args.get("provider_id")
+    location_id, start_text = args.get("location_id"), args.get("start") or args.get("slot")
+    patient = ctx.session.get("patient")
+    if not patient:
+        return {"booked": False, "problems": ["Look the patient up first (full name and date of birth)."]}
+    try:
+        start = datetime.fromisoformat(start_text)
+    except (TypeError, ValueError):
+        return {"booked": False, "problems": ["start must be the slot's 'start' value exactly as check_availability returned it."]}
+    start_key = start.isoformat(timespec="minutes")
+    key = _idempotency_key(ctx.cv, ctx.scope, patient, type_id, provider_id, location_id, start_key)
+
+    existing = await conn.fetchrow(
+        "SELECT confirmation FROM appointments WHERE catalog_version = $1 AND scope = $2 AND idempotency_key = $3",
+        ctx.cv, ctx.scope, key)
+    if existing:
+        return {"booked": True, "already_booked": True, "confirmation": existing["confirmation"]}
+
+    t = await conn.fetchrow("SELECT * FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
+    if not t:
+        return {"booked": False, "problems": [f"Unknown appointment type '{type_id}'."]}
+    # policies 1-5: the same relation retrieval used, re-run at commit
+    ok = await conn.fetchval(
+        """SELECT EXISTS (SELECT 1 FROM bookable_for($1, $2, $3)
+                          WHERE provider_id = $4 AND location_id = $5 AND appointment_type_id = $6)""",
+        ctx.cv, patient["is_new"], patient["referrals"], provider_id, location_id, type_id)
+    if not ok:
+        reasons = await _explain_no_pairs(conn, ctx, t, provider_id, location_id, patient)
+        return {"booked": False, "problems": reasons}
+    # policy 6 + no invented times: the exact provider, site and time must have been offered
+    if (provider_id, location_id, type_id, start_key) not in ctx.session.get("offered", set()):
+        return {"booked": False, "problems": [
+            "That provider, location and time weren't offered in this call. Run check_availability and offer a time first."]}
+
+    async with conn.transaction():
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1 || $2))", ctx.cv, provider_id)
+        free = await free_slots(conn, ctx.cv, [(provider_id, location_id)], t["duration_min"], start, ctx.scopes,
+                                per_pair=1, horizon_days=0)
+        if not free or free[0][2] != start or start < ctx.now():
+            return {"booked": False, "problems": ["That time was just taken or is no longer available. Offer another."]}
+        patient_id = patient.get("id")
+        if not patient_id:
+            patient_id = "new_" + key[:10]
+            await conn.execute(
+                "INSERT INTO patients VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+                ctx.cv, ctx.scope, patient_id, patient["name"], normalize(patient["name"]), date.fromisoformat(patient["dob"]))
+            patient["id"] = patient_id
+        confirmation = "PR-" + key[:6].upper()
+        await conn.execute(
+            """INSERT INTO appointments (catalog_version, scope, confirmation, idempotency_key, patient_id,
+                   provider_id, location_id, appointment_type_id, starts_at, ends_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)""",
+            ctx.cv, ctx.scope, confirmation, key, patient_id, provider_id, location_id, type_id,
+            start, start + timedelta(minutes=t["duration_min"]))
+    names = await conn.fetchrow(
+        """SELECT p.name AS provider, l.name AS location FROM providers p, locations l
+           WHERE p.catalog_version = $1 AND l.catalog_version = $1 AND p.id = $2 AND l.id = $3""",
+        ctx.cv, provider_id, location_id)
+    ctx.session.setdefault("booked", []).append(confirmation)
+    return {
+        "booked": True, "confirmation": confirmation,
+        "summary": f"{t['name']} with {names['provider']} at {names['location']}, {spoken(start, ctx.now().date())}",
+    }
+
+
+# ---- registry --------------------------------------------------------------------------
 
 
 @dataclass
@@ -238,7 +591,8 @@ class Tool:
     description: str
     properties: dict
     required: list
-    run: Callable[[dict], dict]
+    run: Callable[[dict, ToolContext, object], Awaitable[dict]]
+    enums: dict = field(default_factory=dict)   # property -> ctx.enums key, filled per catalog
 
 
 _ID = {"type": "string"}
@@ -247,46 +601,98 @@ TOOLS = {
     t.name: t
     for t in [
         Tool(
-            "find_appointment_types",
-            "Search appointment types by what the caller said. Returns at most 5 candidates with the fields that tell them apart.",
-            {"query": {"type": "string", "description": "Caller's words, e.g. 'skin check' or 'knee MRI'."},
-             "specialty": {"type": "string", "description": "Optional specialty filter."}},
+            "lookup_patient",
+            "Look the caller up by full name and date of birth. Tells you whether they are an existing or new patient "
+            "and which referrals are on file. Do this before checking availability or booking.",
+            {"full_name": {"type": "string"},
+             "date_of_birth": {"type": "string", "description": "YYYY-MM-DD"}},
+            ["full_name", "date_of_birth"],
+            lookup_patient,
+        ),
+        Tool(
+            "search_appointment_types",
+            "Match what the caller wants to the clinic's appointment types, using the caller's own words. Returns the "
+            "best candidates with the facts that tell them apart; when two are easily confused it returns status 'ask' "
+            "with the question to put to the caller.",
+            {"query": {"type": "string", "description": "The caller's own words, e.g. 'skin check' or 'my knee hurts'."},
+             "specialty": {"type": "string", "description": "Optional specialty filter."},
+             "provider_id": {**_ID, "description": "Only types this provider can do."},
+             "location_id": {**_ID, "description": "Only types bookable at this location."}},
             ["query"],
-            find_appointment_types,
+            search_appointment_types,
+            enums={"specialty": "specialty"},
         ),
         Tool(
             "find_providers",
-            "Find providers by name, specialty, appointment type or location. Names are not unique; results carry specialty, title, languages and locations to disambiguate.",
-            {"name": {"type": "string"}, "specialty": {"type": "string"},
-             "appointment_type_id": _ID, "location_id": _ID, "language": {"type": "string"}},
+            "Find providers by name, specialty, appointment type, location or language. Names are not unique: when "
+            "several match it returns status 'ask' and what tells them apart. Includes counts by specialty.",
+            {"name": {"type": "string", "description": "As the caller said it, e.g. 'Dr. Nguyen'."},
+             "specialty": {"type": "string"},
+             "appointment_type_id": {**_ID, "description": "Only providers who can do this type."},
+             "location_id": _ID,
+             "language": {"type": "string"},
+             "accepting_new_patients": {"type": "boolean"}},
             [],
             find_providers,
+            enums={"specialty": "specialty", "language": "language"},
         ),
         Tool(
             "find_locations",
-            "List clinic locations, optionally filtered by name/city or a capability (imaging, lab, physical_therapy, dental, surgery).",
-            {"query": {"type": "string"}, "capability": {"type": "string"}},
+            "Clinic locations with address, phone, opening hours and services. Filter by name, a capability, a day "
+            "they're open, what they can do, or rank by distance from a place the caller names "
+            "(a neighbourhood, street or landmark).",
+            {"name": {"type": "string"},
+             "near": {"type": "string", "description": "Place the caller named, e.g. 'Sunset' or 'Geary Blvd'."},
+             "capability": {"type": "string"},
+             "open_on": {"type": "string", "enum": DAY_NAMES},
+             "appointment_type_id": {**_ID, "description": "Only locations where this type is bookable."},
+             "provider_id": {**_ID, "description": "Only locations where this provider works."}},
             [],
             find_locations,
+            enums={"capability": "capability"},
         ),
         Tool(
             "check_availability",
-            "Get the soonest open slots for an appointment type, optionally narrowed to a provider and/or location. Only returns provider-location pairs that can actually host the type.",
-            {"appointment_type_id": _ID, "provider_id": _ID, "location_id": _ID},
+            "Open slots for an appointment type: soonest first, or nearest first when 'near' is given. Optionally "
+            "narrowed to a provider and/or location. Applies the patient's referral and new-patient rules. Only "
+            "returns provider-location pairs that can actually host the type. Offer only times it returns.",
+            {"appointment_type_id": _ID,
+             "provider_id": _ID,
+             "location_id": _ID,
+             "near": {"type": "string", "description": "A place the caller named, to rank by distance."},
+             "on_or_after": {"type": "string", "description": "YYYY-MM-DD, when the caller can't come sooner."},
+             "part_of_day": {"type": "string", "enum": ["any", "morning", "afternoon"]}},
             ["appointment_type_id"],
             check_availability,
         ),
         Tool(
             "book_appointment",
-            "Book a confirmed slot. The booking is re-checked against every clinic rule and rejected with reasons if invalid.",
-            {"patient_name": {"type": "string"}, "appointment_type_id": _ID, "provider_id": _ID,
-             "location_id": _ID, "slot": {"type": "string"},
-             "is_new_patient": {"type": "boolean"}, "has_referral": {"type": "boolean"}},
-            ["patient_name", "appointment_type_id", "provider_id", "location_id", "slot"],
+            "Book a slot the caller explicitly confirmed. Pass the slot's 'start' exactly as check_availability "
+            "returned it. Every clinic rule is re-checked; a rejection comes back with plain reasons.",
+            {"appointment_type_id": _ID, "provider_id": _ID, "location_id": _ID,
+             "start": {"type": "string", "description": "The slot's 'start' value, e.g. 2026-10-13T09:30."}},
+            ["appointment_type_id", "provider_id", "location_id", "start"],
             book_appointment,
         ),
     ]
 }
+
+
+def schema_properties(tool: Tool, ctx: Optional[ToolContext]) -> dict:
+    """The tool's JSON-schema properties, with this catalog's finite vocabularies as enums."""
+    props = {k: dict(v) for k, v in tool.properties.items()}
+    if ctx is not None:
+        for prop, key in tool.enums.items():
+            if ctx.enums.get(key):
+                props[prop]["enum"] = ctx.enums[key]
+    return props
+
+
+async def run_tool(name: str, args: dict, ctx: ToolContext) -> dict:
+    await ctx.prepare()
+    pool = await db.pool()
+    async with pool.acquire() as conn:
+        return await TOOLS[name].run(args, ctx, conn)
 
 
 def describe_tools() -> list:
@@ -295,7 +701,6 @@ def describe_tools() -> list:
 
 
 def result_size(result: dict) -> Optional[int]:
-    for key in ("appointment_types", "providers", "locations", "options"):
-        if key in result:
-            return len(result[key])
+    if "shown" in result:
+        return result["shown"]
     return None

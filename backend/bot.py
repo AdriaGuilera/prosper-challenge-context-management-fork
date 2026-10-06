@@ -109,6 +109,7 @@ async def run_bot(
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info("Client connected — starting flow at initial node")
+        await builder.prepare()
         await flow_manager.initialize(builder.build_initial_node())
         await builder.announce_start()
 

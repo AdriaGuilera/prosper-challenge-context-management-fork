@@ -1,0 +1,16 @@
+services:
+  db:
+    build: ./db
+    environment:
+      POSTGRES_USER: prosper
+      POSTGRES_PASSWORD: prosper
+      POSTGRES_DB: prosper
+    # 5433 on the host: 5432 is commonly taken by other local projects.
+    ports: ["5433:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prosper"]
+      interval: 2s
+      retries: 30
+volumes:
+  pgdata:
