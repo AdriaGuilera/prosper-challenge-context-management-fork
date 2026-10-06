@@ -42,6 +42,12 @@ export interface AgentSummary {
   nodes: number
 }
 
+export interface PickerOption {
+  id: string
+  label: string
+  note: string
+}
+
 export interface ToolInfo {
   name: string
   description: string

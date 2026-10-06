@@ -335,7 +335,6 @@ input, textarea { caret-color: var(--bell); }
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .field > span { font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .field small { font-size: 12px; color: var(--ink-3); }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 input:not([type='checkbox']), select, textarea {
   width: 100%;

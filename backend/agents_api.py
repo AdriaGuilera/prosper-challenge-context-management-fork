@@ -7,9 +7,11 @@
 #
 
 import json
+import os
 import re
 from pathlib import Path
 
+import aiohttp
 from fastapi import APIRouter, HTTPException
 
 from agent_builder import AgentBuilder
@@ -72,3 +74,73 @@ def delete_agent(agent_id: str) -> dict:
 @router.get("/tools")
 def list_tools() -> list:
     return describe_tools()
+
+
+# Models offered in the picker: OpenAI chat models with fast tool calling. The
+# reasoning models work too but add seconds of latency to every voice turn.
+MODELS = [
+    {"id": "gpt-4o", "label": "GPT-4o", "note": "Default. Reliable tool calls"},
+    {"id": "gpt-4o-mini", "label": "GPT-4o mini", "note": "Faster, cheaper"},
+    {"id": "gpt-4.1", "label": "GPT-4.1", "note": "Stronger instruction following"},
+    {"id": "gpt-4.1-mini", "label": "GPT-4.1 mini", "note": "Faster, cheaper"},
+    {"id": "gpt-4.1-nano", "label": "GPT-4.1 nano", "note": "Fastest, least capable"},
+]
+
+# ElevenLabs stock voices, used when the API key can't list the account's
+# voices (it needs the voices_read permission).
+STOCK_VOICES = [
+    ("21m00Tcm4TlvDq8ikWAM", "Rachel", "female · American"),
+    ("EXAVITQu4vr4xnSDxMaL", "Sarah", "female · American"),
+    ("FGY2WhTYpPnrIDTdsKH5", "Laura", "female · American"),
+    ("cgSgspJ2msm6clMCkdW9", "Jessica", "female · American"),
+    ("XrExE9yKIg1WjnnlVkGX", "Matilda", "female · American"),
+    ("Xb7hH8MSUJpSbSDYk0k2", "Alice", "female · British"),
+    ("pFZP5JQG7iQjIQuC4Bku", "Lily", "female · British"),
+    ("XB0fDUnXU5powFXDhCwa", "Charlotte", "female · Swedish"),
+    ("SAz9YHcvj6GT2YYXdXww", "River", "neutral · American"),
+    ("pNInz6obpgDQGcFmaJgB", "Adam", "male · American"),
+    ("nPczCjzI2devNBz1zQrb", "Brian", "male · American"),
+    ("cjVigY5qzO86Huf0OWal", "Eric", "male · American"),
+    ("iP95p4xoKVk53GoZ742B", "Chris", "male · American"),
+    ("TX3LPaxmHKxFdv7VOQHJ", "Liam", "male · American"),
+    ("bIHbv24MWmeRgasZH58o", "Will", "male · American"),
+    ("JBFqnCBsd6RMkjVDRZzb", "George", "male · British"),
+    ("onwK4e9ZLuTAKqWW03F9", "Daniel", "male · British"),
+    ("N2lVS1w4EtoT3dr4eOWO", "Callum", "male · Transatlantic"),
+    ("IKne3meq5aSn9XLyUdCD", "Charlie", "male · Australian"),
+]
+
+_voices_cache: list | None = None
+
+
+async def _account_voices() -> list | None:
+    key = os.environ.get("ELEVENLABS_API_KEY")
+    if not key:
+        return None
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+            async with session.get("https://api.elevenlabs.io/v1/voices", headers={"xi-api-key": key}) as r:
+                if r.status != 200:
+                    return None
+                data = await r.json()
+    except (aiohttp.ClientError, TimeoutError):
+        return None
+    out = []
+    for v in data.get("voices", []):
+        labels = v.get("labels") or {}
+        note = " · ".join(x for x in (labels.get("gender"), labels.get("accent")) if x)
+        out.append({"id": v["voice_id"], "label": v["name"], "note": note or v.get("category", "")})
+    return out or None
+
+
+@router.get("/models")
+def list_models() -> list:
+    return MODELS
+
+
+@router.get("/voices")
+async def list_voices() -> list:
+    global _voices_cache
+    if _voices_cache is None:
+        _voices_cache = await _account_voices() or [{"id": i, "label": n, "note": d} for i, n, d in STOCK_VOICES]
+    return _voices_cache

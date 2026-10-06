@@ -1,4 +1,4 @@
-import type { Agent, AgentSummary, ToolInfo } from './types'
+import type { Agent, AgentSummary, PickerOption, ToolInfo } from './types'
 
 /** Fill the fields the JSON may omit (the backend schema defaults them too). */
 function normalize(a: Agent): Agent {
@@ -30,4 +30,6 @@ export const api = {
     request<{ id: string }>(`/api/agents/${id}`, { method: 'PUT', body: JSON.stringify(agent) }),
   deleteAgent: (id: string) => request<{ ok: true }>(`/api/agents/${id}`, { method: 'DELETE' }),
   tools: () => request<ToolInfo[]>('/api/tools'),
+  models: () => request<PickerOption[]>('/api/models'),
+  voices: () => request<PickerOption[]>('/api/voices'),
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import type { Agent, AgentNode, Edge, Selection, ToolInfo } from './types'
+import { api } from './api'
+import type { Agent, AgentNode, Edge, PickerOption, Selection, ToolInfo } from './types'
 import type { Problem } from './validate'
 
 interface Props {
@@ -43,7 +44,40 @@ function Section({ title, children, aside }: { title: string; children: React.Re
   )
 }
 
+// Fetched once per page load; the lists don't change while editing.
+const pickerCache = new Map<string, Promise<PickerOption[]>>()
+function usePicker(kind: 'models' | 'voices') {
+  const [options, setOptions] = useState<PickerOption[] | null>(null)
+  useEffect(() => {
+    if (!pickerCache.has(kind)) pickerCache.set(kind, api[kind]().catch(() => []))
+    let alive = true
+    void pickerCache.get(kind)!.then((o) => alive && setOptions(o))
+    return () => {
+      alive = false
+    }
+  }, [kind])
+  return options
+}
+
+function Picker({ value, options, onChange }: { value: string; options: PickerOption[] | null; onChange: (v: string) => void }) {
+  // Keep a value the list doesn't know (hand-edited JSON, a custom voice) selectable.
+  const known = options?.some((o) => o.id === value)
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} disabled={!options}>
+      {!options && <option value={value}>Loading…</option>}
+      {options && !known && <option value={value}>{value || 'Choose…'}</option>}
+      {options?.map((o) => (
+        <option key={o.id} value={o.id}>
+          {o.note ? `${o.label} (${o.note})` : o.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 function AgentForm({ agent, problems, locked, onAgent, onSelect }: Props) {
+  const models = usePicker('models')
+  const voices = usePicker('voices')
   return (
     <div className="inspector">
       <Section title="Agent">
@@ -68,16 +102,14 @@ function AgentForm({ agent, problems, locked, onAgent, onSelect }: Props) {
               ))}
             </select>
           </label>
-          <div className="field-row">
-            <label className="field">
-              <span>LLM model</span>
-              <input value={agent.model} onChange={(e) => onAgent({ model: e.target.value })} />
-            </label>
-            <label className="field">
-              <span>ElevenLabs voice id</span>
-              <input value={agent.voice_id} onChange={(e) => onAgent({ voice_id: e.target.value })} className="mono" />
-            </label>
-          </div>
+          <label className="field">
+            <span>LLM model</span>
+            <Picker value={agent.model} options={models} onChange={(model) => onAgent({ model })} />
+          </label>
+          <label className="field">
+            <span>ElevenLabs voice</span>
+            <Picker value={agent.voice_id} options={voices} onChange={(voice_id) => onAgent({ voice_id })} />
+          </label>
         </fieldset>
       </Section>
       <Section title="Checks" aside={<span className="count">{problems.length || 'All clear'}</span>}>
