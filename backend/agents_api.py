@@ -76,15 +76,29 @@ def list_tools() -> list:
     return describe_tools()
 
 
-# Models offered in the picker: OpenAI chat models with fast tool calling. The
-# reasoning models work too but add seconds of latency to every voice turn.
+# Models offered in the picker. Benchmarked on a spoken-reply + tool-call turn
+# (time to first token, streaming, tools attached): all land around 1s with
+# reasoning off, which a voice turn needs. Left out: models that called tools
+# unprompted in that test (gpt-5-mini, gpt-5.4-mini) and gpt-5.6-sol, the
+# slowest and priciest, built for long reasoning rather than conversation.
 MODELS = [
-    {"id": "gpt-4o", "label": "GPT-4o", "note": "Default. Reliable tool calls"},
-    {"id": "gpt-4o-mini", "label": "GPT-4o mini", "note": "Faster, cheaper"},
-    {"id": "gpt-4.1", "label": "GPT-4.1", "note": "Stronger instruction following"},
-    {"id": "gpt-4.1-mini", "label": "GPT-4.1 mini", "note": "Faster, cheaper"},
-    {"id": "gpt-4.1-nano", "label": "GPT-4.1 nano", "note": "Fastest, least capable"},
+    {"id": "gpt-4o", "label": "GPT-4o", "note": "Default. Proven on this agent"},
+    {"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "note": "Newest. Fast tier, made for conversation", "reasoning_effort": "none"},
+    {"id": "gpt-5.6-terra", "label": "GPT-5.6 Terra", "note": "Newest. Balanced, stronger reasoning", "reasoning_effort": "none"},
+    {"id": "gpt-5.5", "label": "GPT-5.5", "note": "Previous flagship", "reasoning_effort": "none"},
+    {"id": "gpt-5.4", "label": "GPT-5.4", "note": "Quick replies, solid tool calls", "reasoning_effort": "none"},
+    {"id": "gpt-5.4-nano", "label": "GPT-5.4 nano", "note": "Fastest tool calls, cheapest", "reasoning_effort": "none"},
+    {"id": "gpt-5.1", "label": "GPT-5.1", "note": "Fast tool calls", "reasoning_effort": "none"},
 ]
+
+
+def model_extra(model: str) -> dict:
+    """Request params a model needs beyond its id (GPT-5 models reason unless told not to)."""
+    for m in MODELS:
+        if m["id"] == model and "reasoning_effort" in m:
+            return {"reasoning_effort": m["reasoning_effort"]}
+    return {}
+
 
 # ElevenLabs stock voices, used when the API key can't list the account's
 # voices (it needs the voices_read permission).
@@ -135,7 +149,7 @@ async def _account_voices() -> list | None:
 
 @router.get("/models")
 def list_models() -> list:
-    return MODELS
+    return [{"id": m["id"], "label": m["label"], "note": m["note"]} for m in MODELS]
 
 
 @router.get("/voices")

@@ -40,7 +40,7 @@ from pipecat.workers.runner import WorkerRunner
 from pipecat_flows import FlowManager
 
 from agent_builder import AgentBuilder
-from agents_api import AGENTS_DIR, agent_path, router
+from agents_api import AGENTS_DIR, agent_path, model_extra, router
 
 # Load .env next to this file, so the bot runs the same from the repo root or backend/.
 load_dotenv(Path(__file__).parent / ".env", override=True)
@@ -67,7 +67,10 @@ async def run_bot(
         api_key=os.environ["ELEVENLABS_API_KEY"],
         settings=ElevenLabsTTSService.Settings(voice=config.voice_id),
     )
-    llm = OpenAILLMService(api_key=os.environ["OPENAI_API_KEY"], model=config.model)
+    llm = OpenAILLMService(
+        api_key=os.environ["OPENAI_API_KEY"],
+        settings=OpenAILLMService.Settings(model=config.model, extra=model_extra(config.model)),
+    )
 
     context = LLMContext()
     context_aggregator = LLMContextAggregatorPair(
