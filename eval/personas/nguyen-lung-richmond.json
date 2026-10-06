@@ -1,0 +1,48 @@
+{
+  "id": "nguyen-lung-richmond",
+  "description": "'Dr. Nguyen': 8 matches; three of them pulmonologists; the caller knows the site.",
+  "tags": [
+    "collision:surname",
+    "gate:referral"
+  ],
+  "behaviors": [
+    "terse-impatient",
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Omar Haddad",
+    "dob": "1969-12-01",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "Pulmonology Consultation"
+      ]
+    },
+    "goal": "Book a consultation with Dr. Nguyen, your lung doctor, about your asthma. You have a referral.",
+    "opening": "Hello, I'd like an appointment with Dr. Nguyen.",
+    "answers": {
+      "which doctor": "the lung doctor, she's at the Richmond clinic; I don't remember her first name"
+    },
+    "preferences": {
+      "provider": "Dr. Nguyen (lung doctor)",
+      "location": "the Richmond clinic"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Pulmonology Consultation"
+      ]
+    },
+    "provider": {
+      "name": "Nguyen",
+      "specialty": "Pulmonology",
+      "strict": true
+    },
+    "near": "Richmond",
+    "must_ask": [
+      "provider"
+    ]
+  }
+}

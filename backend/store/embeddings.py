@@ -50,7 +50,8 @@ async def embed(conn, texts: list) -> dict:
             "SELECT text, embedding FROM embedding_cache WHERE model = $1 AND text = ANY($2::text[])", MODEL, want
         )
         for r in rows:
-            _memory[r["text"]] = np.asarray(r["embedding"], dtype=np.float32)
+            e = r["embedding"]
+            _memory[r["text"]] = np.asarray(e.to_numpy() if hasattr(e, "to_numpy") else e, dtype=np.float32)
         want = [t for t in want if t not in _memory]
     for i in range(0, len(want), 256):
         batch = want[i : i + 256]

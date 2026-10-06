@@ -1,0 +1,41 @@
+{
+  "id": "annual-checkup-new",
+  "description": "New patient asks for an annual checkup; physical vs wellness is unqueryable.",
+  "tags": [
+    "cluster",
+    "gate:new-patient"
+  ],
+  "behaviors": [
+    "vague"
+  ],
+  "caller": {
+    "name": "Priya Raman",
+    "dob": "1990-06-30",
+    "record": {
+      "existing": false
+    },
+    "goal": "Book your yearly checkup. You've never been to this clinic.",
+    "opening": "Hi, I need to book my annual checkup.",
+    "answers": {
+      "physical or wellness": "a proper hands-on physical exam"
+    },
+    "preferences": {
+      "time": "soonest is fine"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Annual Physical"
+      ],
+      "suboptimal": [
+        "Annual Wellness Visit"
+      ]
+    },
+    "must_ask": [
+      "cluster:annual"
+    ],
+    "time": "soonest"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "id": "new-patient-sato-cosmetic",
+  "description": "New patient asks for a dermatologist who isn't taking new patients; open to others.",
+  "tags": [
+    "gate:new-patient",
+    "collision:surname"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Tess Moreau",
+    "dob": "1993-08-21",
+    "record": {
+      "existing": false
+    },
+    "goal": "Book a cosmetic skin consultation with Dr. Wei Sato, the dermatologist a friend recommended. You're new to the clinic. If Dr. Sato can't, another dermatologist is fine.",
+    "opening": "Hi, I'd like to book a cosmetic consultation with Dr. Wei Sato.",
+    "preferences": {
+      "provider": "Dr. Wei Sato, but another dermatologist is OK if needed"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Cosmetic Consultation"
+      ]
+    },
+    "provider": {
+      "name": "Wei Sato",
+      "strict": false
+    },
+    "must_state": [
+      "not_accepting_new"
+    ]
+  }
+}

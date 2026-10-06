@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS appointment_types (
     requires_referral    boolean NOT NULL,
     new_patients_allowed boolean NOT NULL,
     required_capability  text,                  -- absent on most types: NULL, never ''
-    search_doc           tsvector,              -- name + specialty + aliases
+    search_doc           tsvector,              -- name (A) + specialty (B); aliases have their own ranker
     PRIMARY KEY (catalog_version, id)
 );
 CREATE INDEX IF NOT EXISTS appointment_types_fts ON appointment_types USING gin (search_doc);

@@ -1,0 +1,49 @@
+{
+  "id": "chen-echo-downtown",
+  "description": "Dr. Chen + echocardiogram: provider collision, capability gate and multi-location in one.",
+  "tags": [
+    "collision:surname",
+    "gate:capability",
+    "multi-location"
+  ],
+  "behaviors": [
+    "correction-hunter",
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Alan Reyes",
+    "dob": "1980-04-02",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "Echocardiogram"
+      ]
+    },
+    "goal": "Book the echocardiogram your cardiologist, Dr. David Chen, ordered. You have the referral.",
+    "opening": "Hi, I need to book an echocardiogram with Dr. Chen.",
+    "answers": {
+      "which doctor": "David Chen, my cardiologist",
+      "which location": "whichever is closest to Downtown"
+    },
+    "preferences": {
+      "location": "close to Downtown"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Echocardiogram"
+      ]
+    },
+    "provider": {
+      "name": "David Chen",
+      "strict": true,
+      "says": "Chen"
+    },
+    "near": "Downtown",
+    "must_ask": [
+      "provider"
+    ]
+  }
+}

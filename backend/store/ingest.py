@@ -132,11 +132,10 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
         await conn.executemany(
             """INSERT INTO appointment_types VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
                  setweight(to_tsvector('english', $3), 'A') ||
-                 setweight(to_tsvector('english', $4), 'B') ||
-                 setweight(to_tsvector('english', $9), 'C'))""",
+                 setweight(to_tsvector('english', $4), 'B'))""",
             [(cv, t["id"], t["name"], t["specialty"], t["duration_min"], t["requires_referral"],
-              t["new_patients_allowed"], t.get("required_capability") or None,
-              " ".join(aliases_by_type.get(t["id"], []))) for t in cat["appointment_types"]])
+              t["new_patients_allowed"], t.get("required_capability") or None)
+             for t in cat["appointment_types"]])
         await conn.executemany("INSERT INTO type_aliases VALUES ($1,$2,$3)", alias_rows)
 
         cluster_rows = []

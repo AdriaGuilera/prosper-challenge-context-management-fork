@@ -1,0 +1,34 @@
+{
+  "id": "pinecrest-far-flu",
+  "description": "Lives somewhere with no clinic nearby: must say so, then still help.",
+  "tags": [
+    "proximity:far"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Wes Holloway",
+    "dob": "1955-05-05",
+    "record": {
+      "existing": true
+    },
+    "goal": "Get a flu shot somewhere near Pinecrest, where you live. If nothing is near, take the closest place.",
+    "opening": "Do you have anywhere near Pinecrest where I could get a flu shot?"
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Flu Shot"
+      ],
+      "acceptable": [
+        "Vaccination / Immunization"
+      ]
+    },
+    "near": "Pinecrest",
+    "must_state": [
+      "far"
+    ]
+  }
+}

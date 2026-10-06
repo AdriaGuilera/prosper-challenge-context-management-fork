@@ -1,0 +1,36 @@
+{
+  "id": "info-count-dermatologists",
+  "description": "Coverage question: answer with a count, not a list.",
+  "tags": [
+    "info",
+    "aggregate"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Hana Ito",
+    "dob": "1988-12-12",
+    "record": {
+      "existing": true
+    },
+    "goal": "Find out how many dermatologists the clinic has and whether any of them speak Spanish. Don't book anything.",
+    "opening": "How many dermatologists do you have?"
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "count_providers": {
+          "specialty": "Dermatology"
+        }
+      },
+      {
+        "any_provider": {
+          "specialty": "Dermatology",
+          "language": "Spanish"
+        }
+      }
+    ]
+  }
+}

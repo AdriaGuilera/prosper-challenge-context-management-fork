@@ -33,6 +33,7 @@ class AgentBuilder:
         self._emit = emit
         # Per-call tool state: catalog, calendar scope, clock, and what the call has established.
         self.ctx = ctx or ToolContext()
+        self._repeats: dict = {}
         self._validate()
 
     async def prepare(self) -> None:
@@ -123,6 +124,12 @@ class AgentBuilder:
         tool = TOOLS[name]
 
         async def handler(args: dict, flow_manager: FlowManager):
+            # Loop guard: a model that re-runs the same lookup is stuck; tell it so.
+            key = (node.name, name, json.dumps(args, sort_keys=True, default=str))
+            self._repeats[key] = self._repeats.get(key, 0) + 1
+            if self._repeats[key] > 2:
+                return {"repeat": True, "instruction": "You already ran this exact lookup and have its answer. "
+                        "Don't run it again: answer the caller, ask them something, or take the next step."}, None
             call_id = f"{name}-{time.monotonic_ns()}"
             await self._event("tool_started", id=call_id, node=node.name, tool=name, args=args)
             started = time.perf_counter()

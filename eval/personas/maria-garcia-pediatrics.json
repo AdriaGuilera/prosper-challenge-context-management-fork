@@ -1,0 +1,45 @@
+{
+  "id": "maria-garcia-pediatrics",
+  "description": "'Dr. Maria Garcia' is two people (Pediatrics MD vs Family Medicine NP).",
+  "tags": [
+    "collision:fullname",
+    "cluster"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Leo Martin",
+    "dob": "2019-05-02",
+    "record": {
+      "existing": true
+    },
+    "goal": "You're a parent booking a routine checkup for your son Leo (born May 2, 2019) with Dr. Maria Garcia, his pediatrician.",
+    "opening": "Hi, I want to book my son in with Dr. Maria Garcia for a checkup.",
+    "answers": {
+      "which doctor": "the pediatrician",
+      "child's age": "he's seven",
+      "patient name and date of birth": "Leo Martin, May 2nd 2019"
+    },
+    "preferences": {
+      "provider": "Dr. Maria Garcia, the pediatrician"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Well-Child Visit"
+      ]
+    },
+    "provider": {
+      "name": "Maria Garcia",
+      "specialty": "Pediatrics",
+      "strict": true,
+      "says": "Maria Garcia"
+    },
+    "must_ask": [
+      "provider"
+    ]
+  }
+}

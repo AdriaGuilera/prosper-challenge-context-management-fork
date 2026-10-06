@@ -263,11 +263,21 @@ async def find_providers(args: dict, ctx: ToolContext, conn) -> dict:
     by_specialty: dict = {}
     for r in rows:
         by_specialty[r["specialty"]] = by_specialty.get(r["specialty"], 0) + 1
-    options = [{
-        "provider_id": r["id"], "name": r["name"], "title": r["title"], "specialty": r["specialty"],
-        "accepting_new_patients": r["accepting_new_patients"], "languages": r["languages"] or [],
-        "locations": json.loads(r["locations"]) if isinstance(r["locations"], str) else (r["locations"] or []),
-    } for r in rows]
+    patient = ctx.session.get("patient")
+    options = []
+    for r in rows:
+        opt = {
+            "provider_id": r["id"], "name": r["name"], "title": r["title"], "specialty": r["specialty"],
+            "accepting_new_patients": r["accepting_new_patients"], "languages": r["languages"] or [],
+            "locations": json.loads(r["locations"]) if isinstance(r["locations"], str) else (r["locations"] or []),
+        }
+        if patient:
+            # answer-shaped: whether THIS caller can see them, so "not accepting new patients"
+            # is never misread as a refusal for an existing patient
+            opt["can_see_this_patient"] = (not patient["is_new"]) or r["accepting_new_patients"]
+            if patient["is_new"] and not r["accepting_new_patients"]:
+                opt["why_not"] = "not accepting new patients, and this caller is new"
+        options.append(opt)
     out = _bounded(options, by_specialty=by_specialty)
     if q and len(rows) > 1:
         differs = [k for k in ("specialty", "title", "locations", "languages", "accepting_new_patients")
@@ -507,6 +517,22 @@ async def check_availability(args: dict, ctx: ToolContext, conn) -> dict:
     return out
 
 
+async def list_slots(args: dict, ctx: ToolContext, conn) -> dict:
+    """Raw calendar for the naive baseline: the next free times for a provider at a site,
+    with NO policy filtering. The commit gate in book_appointment still applies."""
+    provider_id, location_id, type_id = args.get("provider_id"), args.get("location_id"), args.get("appointment_type_id")
+    t = await conn.fetchrow("SELECT duration_min FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
+    if not t:
+        return {"error": f"Unknown appointment type '{type_id}'."}
+    slots = await free_slots(conn, ctx.cv, [(provider_id, location_id)], t["duration_min"], ctx.now(), ctx.scopes)
+    today = ctx.now().date()
+    options = [{"start": s.isoformat(timespec="minutes"), "say": spoken(s, today)} for _, _, s in slots]
+    offered = ctx.session.setdefault("offered", set())
+    for o in options:
+        offered.add((provider_id, location_id, type_id, o["start"]))
+    return _bounded(options, limit=MAX_SLOT_OPTIONS, today=_today(ctx))
+
+
 # ---- booking -------------------------------------------------------------------------
 
 
@@ -547,7 +573,13 @@ async def book_appointment(args: dict, ctx: ToolContext, conn) -> dict:
         reasons = await _explain_no_pairs(conn, ctx, t, provider_id, location_id, patient)
         return {"booked": False, "problems": reasons}
     # policy 6 + no invented times: the exact provider, site and time must have been offered
-    if (provider_id, location_id, type_id, start_key) not in ctx.session.get("offered", set()):
+    offered = ctx.session.get("offered", set())
+    if (provider_id, location_id, type_id, start_key) not in offered:
+        same_slot = [o for o in offered if o[0] == provider_id and o[1] == location_id and o[3] == start_key]
+        if len(same_slot) == 1:
+            return {"booked": False, "problems": [
+                f"That time was offered for appointment_type_id {same_slot[0][2]}, not {type_id}. "
+                f"Book it with appointment_type_id {same_slot[0][2]} if that's the visit the caller agreed to."]}
         return {"booked": False, "problems": [
             "That provider, location and time weren't offered in this call. Run check_availability and offer a time first."]}
 
@@ -666,6 +698,14 @@ TOOLS = {
             check_availability,
         ),
         Tool(
+            "list_slots",
+            "Raw calendar (naive baseline only): next free times for a provider at a location, for a type's duration. "
+            "Does NOT check any clinic rule.",
+            {"provider_id": _ID, "location_id": _ID, "appointment_type_id": _ID},
+            ["provider_id", "location_id", "appointment_type_id"],
+            list_slots,
+        ),
+        Tool(
             "book_appointment",
             "Book a slot the caller explicitly confirmed. Pass the slot's 'start' exactly as check_availability "
             "returned it. Every clinic rule is re-checked; a rejection comes back with plain reasons.",
@@ -688,11 +728,69 @@ def schema_properties(tool: Tool, ctx: Optional[ToolContext]) -> dict:
     return props
 
 
+_ENUM_ARGS = {"specialty": "specialty", "capability": "capability", "language": "language"}
+
+
+async def _validate(args: dict, ctx: ToolContext, conn) -> tuple:
+    """Check ids and enum values before a tool runs. An unknown value never becomes a silent
+    empty result (the model would read that as "we have none"). A name passed where an id
+    belongs is resolved when it is unambiguous; otherwise the error says how to fix the call.
+    Returns (args, error dict or None, notes)."""
+    args = {k: v for k, v in args.items() if v not in (None, "")}
+    notes = []
+    for key, enum in _ENUM_ARGS.items():
+        if key in args:
+            allowed = ctx.enums.get(enum, [])
+            match = next((a for a in allowed if a.lower() == str(args[key]).lower()), None)
+            if match is None:
+                hint = " For a kind of visit, use search_appointment_types instead." if key == "capability" else ""
+                return args, {"error": f"{key} '{args[key]}' is not one of: {', '.join(allowed)}.{hint}"}, notes
+            args[key] = match
+    if "appointment_type_id" in args:
+        tid = args["appointment_type_id"]
+        if not await conn.fetchval("SELECT 1 FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, tid):
+            rows = await conn.fetch("SELECT id FROM appointment_types WHERE catalog_version = $1 AND lower(name) = lower($2)", ctx.cv, str(tid))
+            if len(rows) != 1:
+                return args, {"error": f"appointment_type_id '{tid}' is not an id. Use an appointment_type_id from search_appointment_types."}, notes
+            args["appointment_type_id"] = rows[0]["id"]
+            notes.append(f"read appointment type '{tid}' as {rows[0]['id']}")
+    if "provider_id" in args:
+        pid = args["provider_id"]
+        if not await conn.fetchval("SELECT 1 FROM providers WHERE catalog_version = $1 AND id = $2", ctx.cv, pid):
+            q = _HONORIFIC.sub("", normalize(str(pid)))
+            rows = await conn.fetch(
+                "SELECT id, name FROM providers WHERE catalog_version = $1 AND name_score($2, search_name) >= 0.8", ctx.cv, q)
+            if len(rows) != 1:
+                return args, {"error": f"provider_id '{pid}' is not an id"
+                              + (f" and that name fits {len(rows)} providers" if rows else "")
+                              + ". Look the provider up with find_providers (and ask which one if several match)."}, notes
+            args["provider_id"] = rows[0]["id"]
+            notes.append(f"read provider '{pid}' as {rows[0]['name']}")
+    if "location_id" in args:
+        lid = args["location_id"]
+        if not await conn.fetchval("SELECT 1 FROM locations WHERE catalog_version = $1 AND id = $2", ctx.cv, lid):
+            q = normalize(str(lid))
+            rows = await conn.fetch(
+                """SELECT id, name FROM locations WHERE catalog_version = $1
+                     AND (position($2 IN lower(name)) > 0 OR lower(coalesce(place, '')) = $2)""", ctx.cv, q)
+            if len(rows) != 1:
+                return args, {"error": f"location_id '{lid}' is not an id. Use a location_id from find_locations."}, notes
+            args["location_id"] = rows[0]["id"]
+            notes.append(f"read location '{lid}' as {rows[0]['name']}")
+    return args, None, notes
+
+
 async def run_tool(name: str, args: dict, ctx: ToolContext) -> dict:
     await ctx.prepare()
     pool = await db.pool()
     async with pool.acquire() as conn:
-        return await TOOLS[name].run(args, ctx, conn)
+        args, error, notes = await _validate(args, ctx, conn)
+        if error:
+            return error
+        result = await TOOLS[name].run(args, ctx, conn)
+        if notes and isinstance(result, dict):
+            result["resolved"] = notes
+        return result
 
 
 def describe_tools() -> list:
