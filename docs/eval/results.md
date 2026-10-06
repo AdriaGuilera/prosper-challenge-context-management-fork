@@ -32,7 +32,7 @@ Store (Postgres 17 + pgvector + PostGIS + pg_trgm + fuzzystrmatch):
 - a seeded calendar, with slots computed in SQL and joined last.
 
 Verification:
-- `make test` runs 416 tests in about 25 s.
+- `make test` runs 417 tests in about 25 s.
 - The differential test compares the SQL relation with an independent Python engine on every raw triple, in 6 patient states, across all 10 catalogs. The given catalog has 797 raw triples: **760 valid, 37 invalid**, identical on both sides.
 - Scrambling every specialty label moves zero triples.
 - SQL slots equal the Python reference.
@@ -90,8 +90,8 @@ No cached-input discount is assumed for 5.6. Simulator and judge tokens are excl
 
 **Where the baseline fails**, per the failure table in the run's summary.md:
 
-1. **Booking without a read-back and an explicit yes: 47 of 296 conversations.** With everything in one prompt, nothing structural separates "the caller picked a time" from "the caller agreed to this exact booking". The tools design has a confirm node. Its 6 read-back breaks out of 296 are a model forgetting to name the doctor or the time in the read-back.
-2. **Not asking when it must.** On registered ambiguity clusters, the baseline passes 17–61% and the tools 78–94%. Examples:
+1. **Booking without a read-back and an explicit yes: 47 of 296 conversations.** With everything in one prompt, nothing structural separates "the caller picked a time" from "the caller agreed to this exact booking". The tools design has a confirm node. Across 296 tools conversations, the final judge records 1 invariant break in total (a premature "you're all set").
+2. **Not asking when it must.** On registered ambiguity clusters, the baseline passes 17–61% and the tools 78–100%. Examples:
    - "skin check": the baseline books one of the two near-identical types without asking. Sometimes the guess is the right one, and the gate still fails it.
    - "Dr. Chen" for an echocardiogram: the baseline picks a Chen.
 3. **Offering providers at sites they don't work at.** One example: Dr. Kenji Kim "at Mission District Family Clinic". The data is in its prompt; the pairing is the error. The tools design can't do this: a slot exists only for a (provider, location) pair the relation admitted.
@@ -144,7 +144,7 @@ No cached-input discount is assumed for 5.6. Simulator and judge tokens are excl
 | tools | gpt-4o-mini | 85% | 28,334 | 2,668 | $0.004 | 0 |
 | tools | gpt-5.6-luna | 95% | 30,169 | 2,860 | $0.007 | 0 |
 
-The baseline's prompt grows about 4× from the given catalog to this one, and its accuracy halves.
+The baseline's prompt grows about 4× from the given catalog to this one, and its pass rate falls with it: gpt-4o 38%→15%, gpt-4o-mini 35%→20%, gpt-5.6-luna 54%→50%.
 
 These are the hardest hand cases. Many of them ask for something gen-large doesn't have (no Dr. Chen in cardiology, other Nguyens), so the right answer is a refusal followed by an alternative. The tools agent's prompt is the same size it was on 8 locations.
 
@@ -216,7 +216,7 @@ The judge is self-authored, so every change to it is listed here. Each change wa
 
 All were fixed in `be7b2f8`, each with a regression test in `backend/tests/test_judge.py`. The leak tripwire now checks oracle values, not just key names. After the gate changes, every run was re-judged from its saved transcripts (`python -m evals.rejudge`). The tables above are the re-judged numbers.
 
-**The LLM quality judge does not separate the systems:** 4.77 for tools vs 4.65 for the baseline, while the gate separates them by 30–50 points. In stage 1 it averaged 4.58/5 on the 96 conversations that broke a safety invariant (5/5 on "recovery" for 78 of them, a mean of 4.5 or more for 72), against 4.78 for those that passed. That is the measured reason it is not the gate.
+**The LLM quality judge does not separate the systems:** 4.77 for tools vs 4.65 for the baseline, while the gate separates them by 30–50 points. In stage 1 it averaged 4.57/5 on the 90 conversations that broke a safety invariant (5/5 on "recovery" for 72 of them, a mean of 4.5 or more for 67), against 4.78 for those that passed. That is the measured reason it is not the gate.
 
 ## Stage 4: after the fixes (`20261007-010011-stage4-given-after`, `-variants-after`, `20261007-010058-ablation-novectors`)
 

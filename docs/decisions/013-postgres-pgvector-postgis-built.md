@@ -78,6 +78,44 @@ live side by side, and the eval runs them concurrently. Bookings and run-time pa
 - Ingest of the given catalog takes about 0.1 s once embeddings are cached; 285 texts are embedded
   (82 names plus 203 alias rows).
 
+## Measured after build
+
+The verdict thresholds above were the starting point. The eval changed them; the code in `store/search.py` is the
+current rule and this section records why.
+
+**Absolute similarity cannot tell junk from lay phrasing.** Probed on the given catalog: "hello" 0.43,
+"an appointment" 0.51, "appointment with Dr. Nguyen" 0.51, versus "something for my sore throat and ears" 0.42,
+"lump in my breast" 0.44, "my heart keeps racing" 0.45. Decision 005 saw the same thing at 0.424 for "my knee".
+
+**The rule that replaced the thresholds:**
+- A best vector match below `STRONG = 0.55` counts only with lexical support (a full-text hit) *and* a clear top-two
+  gap (≥ 0.04). Otherwise the verdict is `unsure`, and the agent asks the caller to rephrase or picks between
+  offered options.
+- Below 0.35 the verdict is always `unsure`.
+- A registered cluster fires only when one ranker on its own puts two members in its top two. Fused ranks were too
+  noisy: "I feel anxious" pulled in the sick-visit cluster through the word "feel".
+- Aliases were removed from the full-text document, since they have their own exact ranker.
+- An exact type name nested in a longer curated phrase ("ultrasound" in "heart ultrasound") does not count as the
+  caller naming that type.
+- Embedded texts on the given catalog: 299 (82 names, 217 alias rows).
+
+**Value of the vector layer** (`docs/eval/results.md`):
+- Offline, on 40 lay phrases: 29 right / 9 unsure / 2 wrong with vectors, against 22 / 13 / 5 with alias + full text
+  only.
+- The lexical-only errors are confident ones: "I have the flu" → Flu Shot; "broke my wrist, need it checked again"
+  → Pacemaker Check.
+- End to end (gpt-4o-mini, given catalog, N=2): 76% without vectors against 86% / 80% with them. The direction is
+  consistent, but it is not conclusive at this N, because the given personas mostly use phrasing the curated aliases
+  already cover. That coverage is decision 009's point, and it still stands.
+
+**A bug this decision's degradation path hid.** On a cache hit, pgvector returned a `Vector` object where the code
+expected an array. The exception was caught by the "fall back to lexical" branch, so for any phrase seen before, the
+vector ranker was silently off. It was found while probing similarities, and fixed in `a6b2834`. The degradation path
+now logs a warning. Lesson: a graceful fallback must be loud, or it erases the thing it protects.
+
+**Age is a ranking signal.** The patient's age (from `lookup_patient`) steers a minor's search into Pediatrics when
+the caller's words land only on adult types ("checkup" for a 7-year-old). Specialty is still never an eligibility key.
+
 ## Consequences
 
 - `docker compose` becomes a dependency of the demo: `make db-up ingest`, then `make run`.
