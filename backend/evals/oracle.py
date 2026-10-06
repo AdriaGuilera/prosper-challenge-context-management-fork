@@ -45,6 +45,7 @@ class Oracle:
     must_ask: list = field(default_factory=list)
     must_state: list = field(default_factory=list)
     info: list = field(default_factory=list)       # resolved information expectations
+    ask_labels: dict = field(default_factory=dict)  # must_ask -> words a question that asks it would name
     notes: list = field(default_factory=list)
 
     def summary(self) -> dict:
@@ -162,8 +163,13 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
         if pspec.get("says") or pspec.get("name"):
             # what the caller first SAYS ("Dr. Chen"): if it fits several providers who could do this, ask
             by_name = provider_matches(bundle, {"name": pspec.get("says") or pspec["name"]})
-            if len({tr[0] for tr in o.candidates if tr[0] in by_name}) > 1:
+            offering = {tr[0] for tr in o.candidates if tr[0] in by_name}
+            if len(offering) > 1:
                 o.must_ask.append("provider")
+                provs = bundle.providers
+                o.ask_labels["provider_says"] = normalize(pspec.get("says") or pspec["name"]).split()[-1]
+                o.ask_labels["provider"] = sorted({normalize(provs[p]["name"].replace("Dr.", "")).split()[0] for p in offering}
+                                                  | {provs[p]["specialty"].lower() for p in offering})
     o.constrained = constrained
 
     if o.outcome == "booking" and not constrained:
@@ -200,8 +206,11 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
                 offered = {tr[2] for tr in structural}
                 if len(members & offered) >= 2 and o.outcome == "booking":
                     o.must_ask.append(ask)
+                    o.ask_labels[ask] = [m.lower() for m in c["members"]] + [h.lower() for h in c["hints"].values()]
         elif ask == "place":
             o.must_ask.append(ask)
+            o.ask_labels[ask] = sorted({p["name"].lower() for p in bundle.gazetteer["places"] if p["kind"] != "street"}
+                                       | {l["name"].lower() for l in cat["locations"]})
     o.must_ask = list(dict.fromkeys(o.must_ask))
     o.must_state = list(dict.fromkeys(o.must_state))
     return o
@@ -229,12 +238,23 @@ def _why_not(bundle: Bundle, o: Oracle, pspec: Optional[dict], structural: set) 
     return reasons or ["cannot_book"]
 
 
+_CALENDARS: dict = {}
+
+
+def _calendar(bundle: Bundle, anchor: date) -> tuple:
+    key = (bundle.version, bundle.seed, anchor)
+    if key not in _CALENDARS:
+        schedules = calendar.generate_schedules(bundle.catalog, bundle.seed, bundle.calendar.get("density", "normal"))
+        bookings = calendar.generate_prebookings(bundle.catalog, schedules, bundle.seed, anchor,
+                                                 bundle.calendar.get("prebook_rate", 0.3))
+        _CALENDARS[key] = (schedules, bookings)
+    return _CALENDARS[key]
+
+
 def _soonest(bundle: Bundle, anchor: date, clock: datetime, triples: set, o: Oracle) -> Optional[datetime]:
-    schedules = calendar.generate_schedules(bundle.catalog, bundle.seed, bundle.calendar.get("density", "normal"))
-    bookings = calendar.generate_prebookings(bundle.catalog, schedules, bundle.seed, anchor,
-                                             bundle.calendar.get("prebook_rate", 0.3))
+    schedules, bookings = _calendar(bundle, anchor)
     types = bundle.types
-    start = clock
+    start = clock + calendar.LEAD
     if o.on_or_after:
         start = max(start, datetime.combine(o.on_or_after, time()))
     best = None

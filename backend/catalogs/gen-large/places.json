@@ -1,0 +1,114 @@
+{
+ "loc_000": "Eastfield",
+ "loc_001": "City Hall",
+ "loc_002": "Midtown",
+ "loc_003": "Downtown",
+ "loc_004": "Gary Park",
+ "loc_005": "Stonebridge",
+ "loc_006": "Ferry Terminal",
+ "loc_007": "Sunset",
+ "loc_008": "Richmond",
+ "loc_009": "Mission Bay",
+ "loc_010": "Cedar Hill",
+ "loc_011": "Fairview",
+ "loc_012": "Northport",
+ "loc_013": "Lindenwood",
+ "loc_014": "Southgate",
+ "loc_015": "Mission District",
+ "loc_016": "Ballpark",
+ "loc_017": "Twin Oaks",
+ "loc_018": "Old Mill",
+ "loc_019": "Kingsbridge",
+ "loc_020": "Hollow Creek",
+ "loc_021": "Maple Grove",
+ "loc_022": "Riverside",
+ "loc_023": "North Gate",
+ "loc_024": "Brianwood",
+ "loc_025": "Westbrook",
+ "loc_026": "Lakeshore",
+ "loc_027": "North Beach",
+ "loc_028": {
+  "place": "Eastfield",
+  "at": [
+   30.6,
+   17.6
+  ]
+ },
+ "loc_029": {
+  "place": "City Hall",
+  "at": [
+   10.1,
+   10.6
+  ]
+ },
+ "loc_030": {
+  "place": "Midtown",
+  "at": [
+   9.6,
+   11.6
+  ]
+ },
+ "loc_031": {
+  "place": "Downtown",
+  "at": [
+   10.6,
+   9.6
+  ]
+ },
+ "loc_032": {
+  "place": "Gary Park",
+  "at": [
+   16.6,
+   15.6
+  ]
+ },
+ "loc_033": {
+  "place": "Stonebridge",
+  "at": [
+   -1.4,
+   35.6
+  ]
+ },
+ "loc_034": {
+  "place": "Ferry Terminal",
+  "at": [
+   13.6,
+   12.6
+  ]
+ },
+ "loc_035": {
+  "place": "Sunset",
+  "at": [
+   3.6,
+   7.6
+  ]
+ },
+ "loc_036": {
+  "place": "Richmond",
+  "at": [
+   4.6,
+   12.6
+  ]
+ },
+ "loc_037": {
+  "place": "Mission Bay",
+  "at": [
+   14.6,
+   7.6
+  ]
+ },
+ "loc_038": {
+  "place": "Cedar Hill",
+  "at": [
+   25.6,
+   24.6
+  ]
+ },
+ "loc_039": {
+  "place": "Fairview",
+  "at": [
+   20.6,
+   -6.4
+  ]
+ }
+}

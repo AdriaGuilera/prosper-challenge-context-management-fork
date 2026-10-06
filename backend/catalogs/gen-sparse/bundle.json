@@ -1,0 +1,15 @@
+{
+ "name": "gen-sparse",
+ "catalog": "catalog.json",
+ "lexicon": [
+  "../lexicon.base.json"
+ ],
+ "places": "places.json",
+ "patients": "patients.json",
+ "calendar": {
+  "seed": 105,
+  "anchor": "2026-10-12",
+  "density": "sparse",
+  "prebook_rate": 0.6
+ }
+}

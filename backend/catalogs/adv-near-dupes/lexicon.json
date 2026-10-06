@@ -1,0 +1,72 @@
+{
+ "aliases": {
+  "consultation": [
+   "Consultation",
+   "Initial Consultation",
+   "Consult - Extended"
+  ],
+  "first appointment": [
+   "Initial Consultation",
+   "Consultation"
+  ],
+  "annual exam": [
+   "Annual Exam",
+   "Annual Physical",
+   "Annual Wellness Visit"
+  ],
+  "routine blood work": [
+   "Blood Work - Routine",
+   "Blood Draw / Lab Work"
+  ],
+  "belly ultrasound": [
+   "Ultrasound - Abdominal"
+  ]
+ },
+ "clusters": [
+  {
+   "id": "consult",
+   "members": [
+    "Consultation",
+    "Initial Consultation",
+    "Consult - Extended"
+   ],
+   "question": "Is this a quick question for the doctor, a first full visit, or something you'd like a long session for?",
+   "hints": {
+    "Consultation": "a quick question",
+    "Initial Consultation": "a first full visit",
+    "Consult - Extended": "a long session"
+   },
+   "safer_default": "Initial Consultation"
+  },
+  {
+   "id": "annual3",
+   "members": [
+    "Annual Physical",
+    "Annual Wellness Visit",
+    "Annual Exam"
+   ],
+   "question": "Would you like a hands-on physical, a check-in about your health plan, or the longer full annual exam?",
+   "hints": {
+    "Annual Physical": "a hands-on physical",
+    "Annual Wellness Visit": "a health-plan check-in",
+    "Annual Exam": "the longer full exam"
+   },
+   "safer_default": "Annual Exam"
+  },
+  {
+   "id": "blood3",
+   "members": [
+    "Blood Draw / Lab Work",
+    "Fasting Blood Test",
+    "Blood Work - Routine"
+   ],
+   "question": "Were you told to fast before it, and is it your routine yearly blood work?",
+   "hints": {
+    "Fasting Blood Test": "told to fast",
+    "Blood Work - Routine": "routine yearly blood work",
+    "Blood Draw / Lab Work": "a specific test the doctor ordered"
+   },
+   "safer_default": "Blood Draw / Lab Work"
+  }
+ ]
+}

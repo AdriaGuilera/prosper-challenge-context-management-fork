@@ -30,12 +30,23 @@ def raw_triples(catalog: dict) -> list:
     ]
 
 
+_INDEX: dict = {}
+
+
+def _index(catalog: dict) -> tuple:
+    """id -> row maps, built once per catalog object (the catalog is never mutated)."""
+    key = id(catalog)
+    if key not in _INDEX:
+        _INDEX[key] = (catalog, {p["id"]: p for p in catalog["providers"]},
+                       {l["id"]: l for l in catalog["locations"]},
+                       {t["id"]: t for t in catalog["appointment_types"]})
+    return _INDEX[key][1:]
+
+
 def triple_problems(catalog: dict, provider_id: str, location_id: str, type_id: str,
                     patient: Optional[PatientState] = None) -> list:
     """Every policy the triple breaks, as machine-readable codes. Empty means bookable."""
-    providers = {p["id"]: p for p in catalog["providers"]}
-    locations = {l["id"]: l for l in catalog["locations"]}
-    types = {t["id"]: t for t in catalog["appointment_types"]}
+    providers, locations, types = _index(catalog)
     p, loc, t = providers.get(provider_id), locations.get(location_id), types.get(type_id)
     if p is None or loc is None or t is None:
         return ["unknown_entity"]

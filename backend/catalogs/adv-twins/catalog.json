@@ -1,0 +1,247 @@
+{
+ "policies": [
+  "A provider can only be booked at a location listed in their location_ids.",
+  "A provider can only be booked for an appointment type listed in their appointment_type_ids.",
+  "An appointment type with a required_capability can only be booked at a location whose capabilities include that capability (e.g. MRI/X-Ray/CT need 'imaging').",
+  "Appointment types with requires_referral = true need a referral on file before booking.",
+  "A new patient may only book appointment types where new_patients_allowed = true, and only with providers where accepting_new_patients = true.",
+  "When the caller names a provider who practices at multiple locations, the location must be disambiguated before booking."
+ ],
+ "locations": [
+  {
+   "id": "loc_000",
+   "name": "Gary Park Clinic",
+   "address": "12 Park Way",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": [
+    "lab"
+   ]
+  },
+  {
+   "id": "loc_001",
+   "name": "Geary Health Center",
+   "address": "900 Geary Blvd",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": [
+    "imaging",
+    "lab"
+   ]
+  },
+  {
+   "id": "loc_002",
+   "name": "Northport Imaging",
+   "address": "5 Harbor Rd",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 7:00-19:00; Sat 8:00-12:00",
+   "capabilities": [
+    "imaging"
+   ]
+  },
+  {
+   "id": "loc_003",
+   "name": "Sunset Skin & Family",
+   "address": "77 Geary Blvd",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": [
+    "surgery"
+   ]
+  }
+ ],
+ "providers": [
+  {
+   "id": "prov_000",
+   "name": "Dr. Alex Morgan",
+   "title": "MD",
+   "specialty": "Dermatology",
+   "location_ids": [
+    "loc_000",
+    "loc_003"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English",
+    "Spanish"
+   ],
+   "appointment_type_ids": [
+    "appt_000",
+    "appt_001",
+    "appt_002"
+   ]
+  },
+  {
+   "id": "prov_001",
+   "name": "Dr. Alex Morgan",
+   "title": "MD",
+   "specialty": "Dermatology",
+   "location_ids": [
+    "loc_001"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English",
+    "Mandarin"
+   ],
+   "appointment_type_ids": [
+    "appt_000",
+    "appt_001",
+    "appt_002"
+   ]
+  },
+  {
+   "id": "prov_002",
+   "name": "Dr. Sam Chen",
+   "title": "MD",
+   "specialty": "Cardiology",
+   "location_ids": [
+    "loc_000",
+    "loc_001",
+    "loc_002"
+   ],
+   "accepting_new_patients": false,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_003",
+    "appt_004"
+   ]
+  },
+  {
+   "id": "prov_003",
+   "name": "Dr. Sam Chen",
+   "title": "NP",
+   "specialty": "Family Medicine",
+   "location_ids": [
+    "loc_000",
+    "loc_003"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_005",
+    "appt_006"
+   ]
+  },
+  {
+   "id": "prov_004",
+   "name": "Dr. Ruth Okafor",
+   "title": "DDS",
+   "specialty": "Dental",
+   "location_ids": [
+    "loc_000",
+    "loc_003"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_007"
+   ]
+  },
+  {
+   "id": "prov_005",
+   "name": "Dr. Ken Ivanova",
+   "title": "MD",
+   "specialty": "Radiology",
+   "location_ids": [
+    "loc_002"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_008",
+    "appt_003"
+   ]
+  }
+ ],
+ "appointment_types": [
+  {
+   "id": "appt_000",
+   "name": "Skin Cancer Screening",
+   "specialty": "Dermatology",
+   "duration_min": 30,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_001",
+   "name": "Full Body Skin Exam",
+   "specialty": "Dermatology",
+   "duration_min": 30,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_002",
+   "name": "Mole Removal",
+   "specialty": "Dermatology",
+   "duration_min": 30,
+   "requires_referral": true,
+   "new_patients_allowed": false,
+   "required_capability": "surgery"
+  },
+  {
+   "id": "appt_003",
+   "name": "Echocardiogram",
+   "specialty": "Cardiology",
+   "duration_min": 45,
+   "requires_referral": true,
+   "new_patients_allowed": false,
+   "required_capability": "imaging"
+  },
+  {
+   "id": "appt_004",
+   "name": "Cardiology Consultation",
+   "specialty": "Cardiology",
+   "duration_min": 40,
+   "requires_referral": true,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_005",
+   "name": "Annual Physical",
+   "specialty": "Family Medicine",
+   "duration_min": 30,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_006",
+   "name": "Flu Shot",
+   "specialty": "Family Medicine",
+   "duration_min": 10,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_007",
+   "name": "Dental Cleaning",
+   "specialty": "Dental",
+   "duration_min": 45,
+   "requires_referral": false,
+   "new_patients_allowed": true,
+   "required_capability": "dental"
+  },
+  {
+   "id": "appt_008",
+   "name": "MRI - Knee",
+   "specialty": "Radiology",
+   "duration_min": 45,
+   "requires_referral": true,
+   "new_patients_allowed": false,
+   "required_capability": "imaging"
+  }
+ ]
+}

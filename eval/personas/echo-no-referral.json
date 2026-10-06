@@ -14,7 +14,7 @@
     "record": {
       "existing": true
     },
-    "goal": "Book an echocardiogram; your GP mentioned it a while ago. You don't think you have any paperwork for it.",
+    "goal": "Book an echocardiogram; your GP mentioned it a while ago. You don't think you have any paperwork for it. You only want this today: if it can't be booked, don't book something else instead.",
     "opening": "Hi, I'd like to get an echocardiogram."
   },
   "expect": {

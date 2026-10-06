@@ -1,0 +1,123 @@
+{
+ "aliases": {
+  "sports injury": [
+   "Sports Medicine Consultation",
+   "Sports Injury Follow-up"
+  ],
+  "sleep apnea": [
+   "Sleep Study Consultation",
+   "CPAP Follow-up"
+  ],
+  "snoring": [
+   "Sleep Study Consultation"
+  ],
+  "wound": [
+   "Wound Care Visit"
+  ],
+  "stitches out": [
+   "Stitches Removal"
+  ],
+  "hep b": [
+   "Hepatitis B Vaccine"
+  ],
+  "shingles shot": [
+   "Shingles Vaccine"
+  ],
+  "tetanus shot": [
+   "Tdap Booster"
+  ],
+  "lose weight": [
+   "Weight Management Visit"
+  ],
+  "blood pressure": [
+   "Blood Pressure Check"
+  ],
+  "quit smoking": [
+   "Smoking Cessation Visit"
+  ],
+  "rash": [
+   "Eczema Consultation",
+   "Dermatology Consultation"
+  ],
+  "wart": [
+   "Wart Removal"
+  ],
+  "seizures": [
+   "Seizure Follow-up"
+  ],
+  "after the baby": [
+   "Postpartum Visit"
+  ],
+  "iud": [
+   "IUD Insertion"
+  ],
+  "ear wax": [
+   "Ear Wax Removal"
+  ],
+  "heartburn": [
+   "Acid Reflux Consultation"
+  ],
+  "adhd": [
+   "ADHD Evaluation"
+  ],
+  "marriage counseling": [
+   "Couples Counseling"
+  ],
+  "ct scan": [
+   "CT Scan",
+   "CT Scan - Abdomen",
+   "CT Scan - Chest"
+  ],
+  "strep": [
+   "Strep Test"
+  ],
+  "pee test": [
+   "Urine Test"
+  ],
+  "pull a tooth": [
+   "Tooth Extraction"
+  ],
+  "root canal": [
+   "Root Canal Consultation"
+  ],
+  "kidney stones": [
+   "Kidney Stone Follow-up"
+  ],
+  "breastfeeding": [
+   "Lactation Consultation"
+  ],
+  "teen checkup": [
+   "Adolescent Wellness Visit"
+  ]
+ },
+ "clusters": [
+  {
+   "id": "ct-scan",
+   "members": [
+    "CT Scan",
+    "CT Scan - Abdomen",
+    "CT Scan - Chest"
+   ],
+   "question": "What part of the body is the scan for: your head, your belly, or your chest?",
+   "hints": {
+    "CT Scan": "the head or somewhere else",
+    "CT Scan - Abdomen": "the belly",
+    "CT Scan - Chest": "the chest"
+   },
+   "safer_default": null
+  },
+  {
+   "id": "sports",
+   "members": [
+    "Sports Medicine Consultation",
+    "Sports Injury Follow-up"
+   ],
+   "question": "Is this a new injury, or a check-up on one you've already been seen for?",
+   "hints": {
+    "Sports Medicine Consultation": "a new injury",
+    "Sports Injury Follow-up": "already been seen for it"
+   },
+   "safer_default": "Sports Medicine Consultation"
+  }
+ ]
+}

@@ -14,6 +14,7 @@ from datetime import date, datetime, time, timedelta
 from .hours import parse_hours, HoursError
 
 HORIZON_DAYS = 21
+LEAD = timedelta(minutes=30)   # never offer a slot starting sooner than this (applied by callers)
 
 DENSITY = {
     # days per week a provider works, and the share of an open day they cover

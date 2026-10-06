@@ -1,0 +1,16 @@
+{
+ "name": "gen-large",
+ "catalog": "catalog.json",
+ "lexicon": [
+  "../lexicon.base.json",
+  "lexicon.json"
+ ],
+ "places": "places.json",
+ "patients": "patients.json",
+ "calendar": {
+  "seed": 102,
+  "anchor": "2026-10-12",
+  "density": "normal",
+  "prebook_rate": 0.3
+ }
+}

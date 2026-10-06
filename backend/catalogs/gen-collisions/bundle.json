@@ -1,0 +1,15 @@
+{
+ "name": "gen-collisions",
+ "catalog": "catalog.json",
+ "lexicon": [
+  "../lexicon.base.json"
+ ],
+ "places": "places.json",
+ "patients": "patients.json",
+ "calendar": {
+  "seed": 103,
+  "anchor": "2026-10-12",
+  "density": "normal",
+  "prebook_rate": 0.3
+ }
+}

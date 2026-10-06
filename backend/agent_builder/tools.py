@@ -24,6 +24,7 @@ from store.bundle import GAZETTEER_PATH, normalize
 from store.geo import resolve_place
 from store.hours import DAY_NAMES, summarize
 from store.search import rank_types
+from store.calendar import LEAD
 from store.slots import free_slots, spoken
 
 MAX_RESULTS = 5
@@ -470,7 +471,7 @@ async def check_availability(args: dict, ctx: ToolContext, conn) -> dict:
             return {**problem, "total": 0, "shown": 0, "truncated": False, "options": []}
         point = res.point
     pair_list = [(r["provider_id"], r["location_id"]) for r in pairs]
-    slots = await free_slots(conn, ctx.cv, pair_list, t["duration_min"], now, ctx.scopes,
+    slots = await free_slots(conn, ctx.cv, pair_list, t["duration_min"], max(now, ctx.now() + LEAD), ctx.scopes,
                              args.get("part_of_day") or "any")
     meta = {r["id"]: r for r in await conn.fetch(
         """SELECT l.id, l.name, CASE WHEN $3::float8 IS NULL THEN NULL
@@ -524,7 +525,7 @@ async def list_slots(args: dict, ctx: ToolContext, conn) -> dict:
     t = await conn.fetchrow("SELECT duration_min FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
     if not t:
         return {"error": f"Unknown appointment type '{type_id}'."}
-    slots = await free_slots(conn, ctx.cv, [(provider_id, location_id)], t["duration_min"], ctx.now(), ctx.scopes)
+    slots = await free_slots(conn, ctx.cv, [(provider_id, location_id)], t["duration_min"], ctx.now() + LEAD, ctx.scopes)
     today = ctx.now().date()
     options = [{"start": s.isoformat(timespec="minutes"), "say": spoken(s, today)} for _, _, s in slots]
     offered = ctx.session.setdefault("offered", set())
@@ -587,7 +588,7 @@ async def book_appointment(args: dict, ctx: ToolContext, conn) -> dict:
         await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1 || $2))", ctx.cv, provider_id)
         free = await free_slots(conn, ctx.cv, [(provider_id, location_id)], t["duration_min"], start, ctx.scopes,
                                 per_pair=1, horizon_days=0)
-        if not free or free[0][2] != start or start < ctx.now():
+        if not free or free[0][2] != start or start < ctx.now() + LEAD:
             return {"booked": False, "problems": ["That time was just taken or is no longer available. Offer another."]}
         patient_id = patient.get("id")
         if not patient_id:
@@ -625,6 +626,7 @@ class Tool:
     required: list
     run: Callable[[dict, ToolContext, object], Awaitable[dict]]
     enums: dict = field(default_factory=dict)   # property -> ctx.enums key, filled per catalog
+    hidden: bool = False                        # not offered in the builder UI (eval baseline only)
 
 
 _ID = {"type": "string"}
@@ -704,6 +706,7 @@ TOOLS = {
             {"provider_id": _ID, "location_id": _ID, "appointment_type_id": _ID},
             ["provider_id", "location_id", "appointment_type_id"],
             list_slots,
+            hidden=True,
         ),
         Tool(
             "book_appointment",
@@ -761,9 +764,13 @@ async def _validate(args: dict, ctx: ToolContext, conn) -> tuple:
             rows = await conn.fetch(
                 "SELECT id, name FROM providers WHERE catalog_version = $1 AND name_score($2, search_name) >= 0.8", ctx.cv, q)
             if len(rows) != 1:
-                return args, {"error": f"provider_id '{pid}' is not an id"
-                              + (f" and that name fits {len(rows)} providers" if rows else "")
-                              + ". Look the provider up with find_providers (and ask which one if several match)."}, notes
+                err = {"error": f"provider_id '{pid}' is not an id"
+                       + (f" and that name fits {len(rows)} providers" if rows else "")
+                       + ". Look the provider up with find_providers (and ask which one if several match)."}
+                if len(rows) > 1:
+                    err.update({"status": "ask", "ambiguous_arg": "provider_id",
+                                "candidates": [r["name"] for r in rows][:MAX_RESULTS]})
+                return args, err, notes
             args["provider_id"] = rows[0]["id"]
             notes.append(f"read provider '{pid}' as {rows[0]['name']}")
     if "location_id" in args:
@@ -774,7 +781,10 @@ async def _validate(args: dict, ctx: ToolContext, conn) -> tuple:
                 """SELECT id, name FROM locations WHERE catalog_version = $1
                      AND (position($2 IN lower(name)) > 0 OR lower(coalesce(place, '')) = $2)""", ctx.cv, q)
             if len(rows) != 1:
-                return args, {"error": f"location_id '{lid}' is not an id. Use a location_id from find_locations."}, notes
+                err = {"error": f"location_id '{lid}' is not an id. Use a location_id from find_locations."}
+                if len(rows) > 1:
+                    err.update({"status": "ask", "ambiguous_arg": "location_id", "candidates": [r["name"] for r in rows]})
+                return args, err, notes
             args["location_id"] = rows[0]["id"]
             notes.append(f"read location '{lid}' as {rows[0]['name']}")
     return args, None, notes
@@ -795,7 +805,8 @@ async def run_tool(name: str, args: dict, ctx: ToolContext) -> dict:
 
 def describe_tools() -> list:
     """Tool catalog for the builder UI."""
-    return [{"name": t.name, "description": t.description, "parameters": list(t.properties)} for t in TOOLS.values()]
+    return [{"name": t.name, "description": t.description, "parameters": list(t.properties)}
+            for t in TOOLS.values() if not t.hidden]
 
 
 def result_size(result: dict) -> Optional[int]:

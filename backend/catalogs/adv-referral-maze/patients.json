@@ -1,0 +1,24 @@
+[
+ {
+  "id": "pat_001",
+  "name": "Alan Reyes",
+  "dob": "1980-04-02",
+  "referrals": [
+   {
+    "type": "Echocardiogram",
+    "expires": "2026-03-01"
+   }
+  ]
+ },
+ {
+  "id": "pat_002",
+  "name": "Sam Okafor",
+  "dob": "1992-01-20",
+  "referrals": [
+   {
+    "type": "MRI - Knee",
+    "expires": "2027-03-01"
+   }
+  ]
+ }
+]

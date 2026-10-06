@@ -61,7 +61,9 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
     last_act, last_text = None, ""
     seen = []  # caller words + tool results so far: what the agent may legitimately say
     for e in events:
-        if e["type"] == "caller":
+        if e["type"] == "context":
+            seen.append(e["text"])  # instructions the agent was given (the baseline's catalog lives here)
+        elif e["type"] == "caller":
             last_act, last_text = e["act"], e["text"]
             seen.append(e["text"])
         elif e["type"] == "tool_finished":
@@ -80,6 +82,15 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
             for l in cat["locations"]:
                 if f" {normalize(l['name'])} " in f" {said} " and f" {normalize(l['name'])} " not in f" {corpus} ":
                     violations.append(f"named location '{l['name']}' before any lookup returned it")
+            # a provider offered at a site they don't practise at (system-agnostic: holds even
+            # when the whole catalog sits in the prompt)
+            named_p = [p for p in cat["providers"]
+                       if f" {normalize(p['name'].replace('Dr.', ''))} " in f" {said} "]
+            named_l = [l for l in cat["locations"] if f" {normalize(l['name'])} " in f" {said} "]
+            if len(named_p) == 1:
+                for l in named_l:
+                    if l["id"] not in named_p[0]["location_ids"]:
+                        violations.append(f"offered {named_p[0]['name']} at {l['name']}, where they don't practise")
             raw_seen = " ".join(seen).lower().replace(" ", "").replace(".", "")
             for h, m, ap in TIME_RE.findall(e["text"]):
                 t = _norm_time(h, m, ap)
@@ -97,12 +108,29 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
         want = {"provider": ("find_providers", "ask"), "place": (None, "ask_place")}.get(ask, ("search_appointment_types", "ask"))
         ok = False
         for i, e in enumerate(events):
-            if e["type"] == "tool_finished" and (want[0] is None or e["tool"] == want[0]) \
-                    and (e.get("result") or {}).get("status") == want[1]:
+            r = e.get("result") or {}
+            ambiguous_arg = ask in ("provider", "place") and r.get("status") == "ask" and r.get("ambiguous_arg")
+            if e["type"] == "tool_finished" and (ambiguous_arg or (
+                    (want[0] is None or e["tool"] == want[0]) and r.get("status") == want[1])):
                 nxt = agent_after(i)
                 if nxt and "?" in nxt[0]["text"]:
                     ok = True
                     break
+        if not ok:
+            # same standard for every system: a question to the caller that names at least two
+            # of the things being disambiguated (two first names, two visit types, two areas)
+            labels = o.ask_labels.get(ask, [])
+            for e in events:
+                if e["type"] == "agent" and "?" in e["text"]:
+                    low = e["text"].lower()
+                    if sum(1 for lab in labels if lab and re.search(rf"\b{re.escape(lab)}\b", low)) >= 2:
+                        ok = True
+                        break
+                    says = o.ask_labels.get("provider_says")
+                    if ask == "provider" and says and says in low and re.search(
+                            r"\b(which|two|three|several|multiple|more than one|a few|both)\b", low):
+                        ok = True
+                        break
         if not ok:
             failures.append(f"did not ask: {ask}")
 

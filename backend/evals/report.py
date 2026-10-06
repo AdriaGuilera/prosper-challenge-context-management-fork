@@ -29,12 +29,13 @@ def _group_table(rows: list, keys: tuple) -> list:
         groups[tuple(r[k] for k in keys)].append(r)
     out = [
         "| " + " | ".join(keys) + " | convs | gate pass | mean score | ideal/acc/sub/wrong | invariant breaks | "
-        "LLM calls/conv | prompt tok/conv | max prompt tok | compl tok/conv | $/conv | turn p50/p95 ms | quality |",
+        "LLM calls/conv | prompt tok/conv | max prompt tok | compl tok/conv | $/conv | turn p50/p95 ms | tool p50/p95 ms | quality |",
         "|" + "---|" * (len(keys) + 13),
     ]
     for k, rs in sorted(groups.items()):
         tiers = Counter(r["tier"] for r in rs)
         turn_ms = [m for r in rs for m in r["turn_ms"]]
+        tool_ms = [m for r in rs for m in r.get("tool_ms", [])]
         cost = [r["cost_usd"] for r in rs if r["cost_usd"] is not None]
         quality = [r["quality"]["mean"] for r in rs if r.get("quality") and "mean" in r["quality"]]
         out.append(
@@ -45,6 +46,7 @@ def _group_table(rows: list, keys: tuple) -> list:
             f"{_mean([r['prompt_tokens'] for r in rs])} | {_mean([r['max_prompt_tokens'] for r in rs])} | "
             f"{_mean([r['completion_tokens'] for r in rs])} | "
             f"{('$%.4f' % statistics.mean(cost)) if cost else 'n/a'} | {_p(turn_ms, .5)}/{_p(turn_ms, .95)} | "
+            f"{_p(tool_ms, .5)}/{_p(tool_ms, .95)} | "
             f"{_mean(quality, '{:.2f}')} |")
     return out
 
@@ -99,3 +101,17 @@ def write_summary(out_dir: Path, rows: list, meta: dict) -> Path:
     path = out_dir / "summary.md"
     path.write_text("\n".join(lines))
     return path
+
+
+def main(argv) -> None:
+    """Rebuild summary.md from a run's results.jsonl (e.g. after an interrupted run)."""
+    import json
+    run = Path(argv[0])
+    rows = [json.loads(line) for line in (run / "results.jsonl").read_text().splitlines() if line.strip()]
+    meta = json.loads((run / "meta.json").read_text())
+    print(write_summary(run, rows, meta))
+
+
+if __name__ == "__main__":
+    import sys
+    main(sys.argv[1:])

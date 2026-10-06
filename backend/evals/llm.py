@@ -11,10 +11,13 @@ import time
 from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, InternalServerError, RateLimitError
 
 # USD per 1M tokens: (input, cached input, output). Models without a published price
-# in this table report tokens only.
+# in this table report tokens only. GPT-5.6 rates are the public list prices after the
+# July 2026 cut; no cached-input discount is assumed for them (conservative).
 PRICES = {
     "gpt-4o": (2.50, 1.25, 10.00),
     "gpt-4o-mini": (0.15, 0.075, 0.60),
+    "gpt-5.6-luna": (0.20, 0.20, 1.20),
+    "gpt-5.6-terra": (2.00, 2.00, 12.00),
 }
 
 _client = None
