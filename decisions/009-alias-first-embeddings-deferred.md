@@ -20,7 +20,9 @@ Two things changed that:
 - **`entity_aliases`** — a curated table mapping caller phrasing to candidate type ids — is the
   primary mapping. It is exact, free, offline, and sub-millisecond.
 - **Registered `ambiguity_clusters`** replace the cosine-gap threshold as the runtime trigger for
-  asking. Members of a registered cluster are never auto-resolved, regardless of any score.
+  asking. A cluster member is never auto-resolved **on ranker score alone** — a caller-supplied
+  disambiguator always wins, and the agent must not re-ask after the caller has answered.
+  *(The wording "regardless of any score" was too strong; corrected after round-2 review.)*
 - **The embedding gap is kept as a discovery mechanism, not a runtime gate.** We measured that it
   separates cleanly (median gap 0.098 for phrases a human hesitates on vs 0.273 for clear ones),
   which makes it a good way to *find* clusters worth registering. It is not needed at runtime.

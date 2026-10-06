@@ -17,6 +17,7 @@ reverse it**.
 | 007 | [One fictional geography shared by data and tests](007-fictional-geography.md) | accepted |
 | 008 | [Scale hardening: namespaced identity, bounded results, degradation](008-scale-and-multitenant-hardening.md) | accepted |
 | 009 | [Alias table and ambiguity clusters now; semantic layer deferred](009-alias-first-embeddings-deferred.md) | accepted (revises 005's timing) |
+| 010 | [Ship the spine; reclassify the rest as designed-and-descoped](010-ship-the-spine.md) | accepted (supersedes scope in 001/005/006/007/008) |
 
 Related: `approaches/` holds candidate solutions (options under consideration);
 `decisions/` holds choices made among them; `reviews/` holds external review of both.

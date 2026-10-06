@@ -27,9 +27,13 @@ last resort.
 
 Same two options; only the second is a question a patient can act on.
 
-**Fallback when the caller still cannot choose:** pick the safer default (the more general
-option), state which one was booked, and make it explicitly changeable. Never leave the
-choice implicit.
+**Fallback when the caller still cannot choose:** *propose* the safer default, state which one it would
+be, and require an explicit yes before writing. Never leave the choice implicit.
+
+*(Corrected after round-2 review.)* The original wording — "pick the safer default, state which one was
+booked" — contradicted our own commit gate: no booking from an undiscriminated set without an explicit
+choice. Booking the default directly would be rejected by the gate we designed. The fallback therefore
+costs one extra turn and keeps the rule intact.
 
 ## Rationale
 

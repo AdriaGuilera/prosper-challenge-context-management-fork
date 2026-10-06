@@ -76,9 +76,11 @@ CREATE INDEX ix_cap_cap  ON location_capabilities(capability);
    is the authority; `specialty` is a display and routing label. Wire specialty into a
    foreign key and the correctness layer is wrong by construction — and it looks correct on
    a small sample.
-2. **Do not materialise the (provider, location, type) triples.** 518 edges derive into 760
-   valid triples today; at target scale that becomes millions of rows while the join stays
-   cheap. Index the edges; let the planner intersect.
+2. **Do not materialise the (provider, location, type) triples for storage.** 518 edges derive into
+   760 valid triples today; at the target rung it is ~30k rows, not millions *(an earlier draft said
+   millions — wrong by two orders of magnitude)*. Index the edges; let the planner intersect. A
+   materialised relation is still worth having as a **derived read model** when the schema is the
+   validity definition — see decision 010.
 3. **`required_capability` is absent, not null** on 65 of 82 types. Nullable column, read
    with `.get()` / `IS NULL`, and never make it part of an index prefix.
 
