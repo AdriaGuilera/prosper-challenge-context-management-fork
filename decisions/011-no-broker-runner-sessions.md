@@ -56,8 +56,13 @@ so that the trace *is* the visible evidence of the Phase 2 context management.
 - **Self-hosting is ruled out on resources.** Langfuse v3 minimums are web 4 GiB + worker 4 GiB +
   Postgres 4 GiB + ClickHouse 8 GiB + Redis 1.5 GiB — five containers and roughly 16–24 GiB RAM.
   This box has 7.6 GB and runs live apps. It would also contradict 010.
-- **Therefore Langfuse Cloud Hobby:** free, 50k units/month, 30-day retention, 2 seats, hard cap
-  (no overage — ingestion simply stops), ~1k ingest req/min.
+- **Decided: Langfuse Cloud Hobby** (free) — 50k units/month, 30-day retention, 2 seats, hard cap
+  (no overage; ingestion simply stops), ~1k ingest req/min. Confirmed after measuring this box:
+  5.0 GiB available against published self-host minimums of ~25.5 GiB, and the `hermes` user has no
+  docker socket access here anyway.
+- **Capacity is not a concern at demo scale.** A call is one trace plus roughly six observations per
+  turn, so ~60–100 units per call — 500–800 calls/month inside the cap. The binding limits are the
+  2 seats and 30-day retention, not volume.
 - **Never in the turn path:** batched async export, drop-on-failure, no per-turn flush. Otherwise a
   tracing outage turns into voice latency, which is the one budget we cannot spend.
 - **Unverified:** the tracing API version. Pipecat's docs list `enable_tracing` as deprecated since
