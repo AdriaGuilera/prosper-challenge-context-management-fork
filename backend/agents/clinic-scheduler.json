@@ -1,0 +1,148 @@
+{
+  "name": "Clinic Scheduler",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "model": "gpt-4o",
+  "persona": "You are a warm, efficient scheduling assistant for a multi-specialty clinic. Your replies are spoken aloud: no lists, no symbols, one or two short sentences. Never invent providers, locations, appointment types or times; only use what a lookup returned. Never read ids aloud. When two options look alike, ask the one question that tells them apart, in the caller's words.",
+  "initial_node": "greeting",
+  "nodes": [
+    {
+      "name": "greeting",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Greet the caller, say you're the clinic's scheduling assistant, and ask how you can help today."
+        }
+      ],
+      "edges": [
+        {
+          "function": "wants_to_book",
+          "description": "The caller wants to book an appointment.",
+          "target": "identify_visit",
+          "properties": {},
+          "required": []
+        },
+        {
+          "function": "has_a_question",
+          "description": "The caller has a question about locations, doctors or appointment types.",
+          "target": "answer_questions",
+          "properties": {},
+          "required": []
+        }
+      ],
+      "ui": {"position": {"x": 0, "y": 160}}
+    },
+    {
+      "name": "answer_questions",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Answer the caller's questions about locations, providers and appointment types using the lookups. Keep answers short. When they're done, offer to book."
+        }
+      ],
+      "tools": ["find_locations", "find_providers", "find_appointment_types"],
+      "edges": [
+        {
+          "function": "wants_to_book",
+          "description": "The caller now wants to book an appointment.",
+          "target": "identify_visit",
+          "properties": {},
+          "required": []
+        },
+        {
+          "function": "finished",
+          "description": "The caller has no more questions and does not want to book.",
+          "target": "goodbye",
+          "properties": {},
+          "required": []
+        }
+      ],
+      "ui": {"position": {"x": 340, "y": 360}}
+    },
+    {
+      "name": "identify_visit",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Find out what kind of visit the caller needs and whether they are a new patient. Use find_appointment_types with their own words. If several types fit, ask a plain-language question that separates them. If the type needs a referral, ask whether they have one."
+        }
+      ],
+      "tools": ["find_appointment_types"],
+      "edges": [
+        {
+          "function": "visit_identified",
+          "description": "Record the appointment type once exactly one fits and the caller agrees.",
+          "target": "find_slot",
+          "properties": {
+            "appointment_type_id": {"type": "string", "description": "Id from find_appointment_types."},
+            "is_new_patient": {"type": "boolean"},
+            "has_referral": {"type": "boolean"}
+          },
+          "required": ["appointment_type_id", "is_new_patient"]
+        }
+      ],
+      "ui": {"position": {"x": 340, "y": 0}}
+    },
+    {
+      "name": "find_slot",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Ask whether they prefer a specific doctor, a location, or simply the soonest time. Use the lookups to narrow down, then check_availability, and offer at most two concrete times with the doctor and location."
+        }
+      ],
+      "tools": ["find_providers", "find_locations", "check_availability"],
+      "edges": [
+        {
+          "function": "slot_chosen",
+          "description": "Record the slot the caller picked.",
+          "target": "confirm_booking",
+          "properties": {
+            "provider_id": {"type": "string"},
+            "location_id": {"type": "string"},
+            "slot": {"type": "string"}
+          },
+          "required": ["provider_id", "location_id", "slot"]
+        }
+      ],
+      "ui": {"position": {"x": 700, "y": 0}}
+    },
+    {
+      "name": "confirm_booking",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Get the caller's full name, read back the visit, doctor, location and time, and once they confirm call book_appointment. If it's rejected, explain the reason simply and go back to finding a slot."
+        }
+      ],
+      "tools": ["book_appointment"],
+      "edges": [
+        {
+          "function": "booked",
+          "description": "The booking succeeded.",
+          "target": "goodbye",
+          "properties": {"confirmation": {"type": "string"}},
+          "required": ["confirmation"]
+        },
+        {
+          "function": "pick_another_slot",
+          "description": "The booking was rejected or the caller wants a different time.",
+          "target": "find_slot",
+          "properties": {},
+          "required": []
+        }
+      ],
+      "ui": {"position": {"x": 1060, "y": 0}}
+    },
+    {
+      "name": "goodbye",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "If something was booked, repeat the confirmation code. Thank the caller and say goodbye."
+        }
+      ],
+      "end": true,
+      "ui": {"position": {"x": 1060, "y": 360}}
+    }
+  ]
+}
