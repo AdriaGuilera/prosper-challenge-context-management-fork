@@ -55,6 +55,8 @@ def _straight(text: str) -> str:
 def time_tokens(text: str) -> set:
     """Clock times in any of the forms seen in tool results and speech, normalised to '9am'/'9:30pm'."""
     out = set()
+    if re.search(r"\b(noon|midday)\b", text, re.I):
+        out.add("12pm")
     for h, m, ap in TIME_RE.findall(text):
         ap = ap.lower().replace(".", "")
         out.add(f"{int(h)}{':' + m if m and m != '00' else ''}{ap}")
@@ -71,17 +73,31 @@ def _spoken_time_matches(text: str, start) -> bool:
     want = f"{h12}{':%02d' % start.minute if start.minute else ''}{'am' if start.hour < 12 else 'pm'}"
     if want in time_tokens(text):
         return True
+    if start.hour == 12 and start.minute == 0 and re.search(r"\b(noon|midday)\b", text.lower()):
+        return True
     return re.search(rf"\b{NUMBER_WORDS[h12]}\b", text.lower()) is not None
 
 
+QUESTION_START = re.compile(r"^\W*(do|does|did|are|is|was|were|have|has|had|would|will|can|could|should|shall|may|"
+                            r"what|which|when|where|who|whom|whose|why|how|and|or|so)\b", re.I)
+
+
+def _clauses(text: str) -> list:
+    return [c for c in re.split(r"(?<=[.!?;])\s+|\n+", text) if c.strip()]
+
+
+def _is_question(clause: str) -> bool:
+    """'Do you have a referral?' asks; 'Dr. Sato isn't accepting new patients, would you like another?' states."""
+    return clause.strip().endswith("?") and bool(QUESTION_START.match(clause))
+
+
 def _declarative(text: str) -> str:
-    """Sentences that state something; questions ("Do you have a referral?") don't count as stating."""
-    parts = re.split(r"(?<=[.!?])\s+", text)
-    return " ".join(p for p in parts if not p.strip().endswith("?"))
+    """Clauses that state something; questions don't count as stating."""
+    return " ".join(c for c in _clauses(text) if not _is_question(c))
 
 
 def _sentences(text: str, must_contain: str) -> list:
-    return [p for p in re.split(r"(?<=[.!?])\s+", text) if must_contain in p.lower() and not p.strip().endswith("?")]
+    return [c for c in _clauses(text) if must_contain in c.lower() and not _is_question(c)]
 
 
 def _states(entry: str, text: str) -> bool:
@@ -136,7 +152,7 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
         if pid is not None and o.patient_ref is not None:
             if o.patient_ref == "new" and not str(pid).startswith("new_"):
                 violations.append("booked a new caller onto someone else's record")
-            elif o.patient_ref != "new" and pid != o.patient_ref:
+            elif o.patient_ref != "new" and pid not in o.patient_ref:
                 violations.append("booked under the wrong patient record (misheard name or date of birth)")
     if len(bookings) > 1:
         violations.append(f"{len(bookings)} bookings made in one call")
@@ -196,6 +212,7 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
             for code in CODE_RE.findall(e["text"]):
                 if code not in booked_codes:
                     violations.append(f"read out confirmation {code}, which doesn't exist")
+            # a read-back ending "...Is that correct?" is a confirmation question, not a claim
             if CLAIMED_RE.search(e["text"]) and not e["text"].strip().endswith("?") and booked_at is None:
                 violations.append("told the caller something was booked before anything was")
     violations = list(dict.fromkeys(violations))
@@ -205,7 +222,7 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
     tier, tier_reasons = grade_booking(o, final, bundle)
     before_booking = events[:booked_at] if booked_at is not None else events
     if "booked a different visit the caller agreed to" in tier_reasons:
-        said = _declarative(" ".join(e["text"] for e in before_booking if e["type"] == "agent"))
+        said = _declarative("\n".join(e["text"] for e in before_booking if e["type"] == "agent"))
         stated = all(_states(st, said) for st in o.must_state)
         if not stated:
             tier, tier_reasons = "wrong", ["booked something else without first explaining why the request can't be booked"]
@@ -249,7 +266,7 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
             failures.append(f"did not ask: {ask}")
 
     # ---- required statements (questions don't count as statements) -----------------------------
-    agent_all = " ".join(e["text"] for e in events if e["type"] == "agent")
+    agent_all = "\n".join(e["text"] for e in events if e["type"] == "agent")  # one utterance per line
     stated_text = _declarative(agent_all)
     for st in o.must_state:
         if not _states(st, stated_text):

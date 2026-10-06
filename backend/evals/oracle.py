@@ -46,7 +46,7 @@ class Oracle:
     must_state: list = field(default_factory=list)
     info: list = field(default_factory=list)       # resolved information expectations
     ask_labels: dict = field(default_factory=dict)  # must_ask -> words a question that asks it would name
-    patient_ref: Optional[str] = None               # the record a booking must land on: seeded id, or "new"
+    patient_ref: Optional[object] = None            # records a booking may land on: {ids} of this person, or "new"
     notes: list = field(default_factory=list)
 
     def summary(self) -> dict:
@@ -136,7 +136,13 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
     patient = patient_state(bundle, persona["caller"].get("record", {}), clock)
     o = Oracle(persona["id"], bundle.name, exp["outcome"], patient)
     rec = persona["caller"].get("record", {})
-    o.patient_ref = seeded_patient_id(persona["caller"]["name"]) if rec.get("existing") else "new"
+    if rec.get("existing"):
+        # the eval seeds its own copy; the catalog's registry may already hold the same person
+        same = {p["id"] for p in bundle.patients
+                if normalize(p["name"]) == normalize(persona["caller"]["name"]) and p["dob"] == persona["caller"]["dob"]}
+        o.patient_ref = {seeded_patient_id(persona["caller"]["name"])} | same
+    else:
+        o.patient_ref = "new"
     ids_by_name = bundle.type_ids_by_name()
     for tier in ("ideal", "acceptable", "suboptimal"):
         for name in exp.get("types", {}).get(tier, []):

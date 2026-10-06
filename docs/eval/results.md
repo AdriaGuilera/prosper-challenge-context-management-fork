@@ -10,18 +10,18 @@ are gitignored, so this file is the record. Every number below names its run id 
 
 | | tools agent (this design) | naive full-catalog prompt |
 |---|---|---|
-| gate pass, given catalog, 4 models × 37 cases × 2 | **85–92%** | 35–62% |
-| gate pass, 300-provider catalog (stage 3) | **70–75%** | 15–45% |
+| gate pass, given catalog, 4 models × 37 cases × 2 | **86–95%** | 35–62% |
+| gate pass, 300-provider catalog (stage 3) | **80–95%** | 15–50% |
 | prompt tokens per conversation, given → 300 providers | ~27k → ~28k (**flat**) | ~88k → 375–470k |
 | largest single prompt, given → 300 providers | ~2.6k → ~2.8k | ~8.7k → ~32k |
-| conversations with a safety-invariant break (given) | 1–3 / 74 | 16–34 / 74 |
+| conversations with a safety-invariant break (given) | 0–1 / 74 | 16–34 / 74 |
 | $/conversation, gpt-4o, given | $0.050 | $0.119 |
 
 - Accuracy and cost move in the same direction: the agent that sees less is right more often.
 - Its context does not grow with the catalog. The baseline's grows linearly.
 - The model choice matters far less than the context design:
-  - the cheapest model on the tools design (gpt-4o-mini, $0.004/conv) beats the most expensive model on the baseline (gpt-5.6-terra, $0.18/conv) by 23 points;
-  - on tools, all four models land within 7 points of each other;
+  - the cheapest model on the tools design (gpt-4o-mini, $0.004/conv) beats the most expensive model on the baseline (gpt-5.6-terra, $0.18/conv) by 24 points;
+  - on tools, all four models land within 9 points of each other;
   - on the baseline they spread over 27 points.
 
 ## What was built and what the eval checks
@@ -72,9 +72,9 @@ Personas:
 | baseline | gpt-5.6-luna | 54% | 0.59 | 57/9/0/8 | 21 | 9.5 | 81,265 | 8,974 | $0.017 | 1978/4489 | 4.55 |
 | baseline | gpt-5.6-terra | 62% | 0.68 | 59/9/2/4 | 16 | 10.4 | 87,712 | 8,798 | $0.180 | 1936/4372 | 4.73 |
 | **tools** | gpt-4o | **92%** | 0.94 | 67/4/0/3 | 1 | 14.3 | 24,298 | 2,453 | $0.050 | 2547/4694 | 4.86 |
-| **tools** | gpt-4o-mini | **85%** | 0.84 | 60/4/0/10 | 1 | 15.2 | 28,892 | 2,659 | $0.004 | 2487/4507 | 4.70 |
-| **tools** | gpt-5.6-luna | **88%** | 0.90 | 62/8/0/4 | 2 | 14.4 | 27,554 | 2,672 | $0.006 | 2848/4881 | 4.74 |
-| **tools** | gpt-5.6-terra | **88%** | 0.91 | 69/2/0/3 | 3 | 14.3 | 26,958 | 2,655 | $0.059 | 2883/4927 | 4.79 |
+| **tools** | gpt-4o-mini | **86%** | 0.85 | 60/4/0/10 | 0 | 15.2 | 28,892 | 2,659 | $0.004 | 2487/4507 | 4.70 |
+| **tools** | gpt-5.6-luna | **93%** | 0.91 | 62/8/0/4 | 0 | 14.4 | 27,554 | 2,672 | $0.006 | 2848/4881 | 4.74 |
+| **tools** | gpt-5.6-terra | **95%** | 0.95 | 69/2/0/3 | 0 | 14.3 | 26,958 | 2,655 | $0.059 | 2883/4927 | 4.79 |
 
 Notes on reading the table:
 - "Mean score" is the outcome tier: 1 ideal, 0.7 acceptable, 0.3 suboptimal, 0 wrong; any invariant break scores 0.
@@ -115,15 +115,15 @@ No cached-input discount is assumed for 5.6. Simulator and judge tokens are excl
 | catalog | gpt-4o-mini | gpt-5.6-luna | invariant breaks |
 |---|---|---|---|
 | gen-small (3 loc, 12 prov) | 86% | 80% | 0 |
-| gen-large (40 loc, 300 prov) | 89% | 91% | 0 |
+| gen-large (40 loc, 300 prov) | 89% | 94% | 0 |
 | gen-collisions | 74% | 86% | 0 |
-| gen-gates | 77% | 91% | 1 |
-| gen-sparse | 77% | 83% | 0 |
-| gen-oddhours | 83% | 86% | 1 |
+| gen-gates | 77% | 94% | 1 |
+| gen-sparse | 77% | 86% | 0 |
+| gen-oddhours | 83% | 89% | 1 |
 | adv-twins | 80% | 86% | 0 |
-| adv-referral-maze | 69% | 80% | 0 |
-| adv-near-dupes | 74% | 57% | 0 |
-| **all** | **79%** | **82%** | 2 / 630 |
+| adv-referral-maze | 69% | 83% | 0 |
+| adv-near-dupes | 77% | 57% | 0 |
+| **all** | **79%** | **84%** | 2 / 630 |
 
 - **Scale does not hurt.** gen-large (300 providers) scores as well as or better than the given catalog. The largest prompt is ~2.4k tokens on every catalog.
 - **What hurts is meaning, not size.**
@@ -139,10 +139,10 @@ No cached-input discount is assumed for 5.6. Simulator and judge tokens are excl
 |---|---|---|---|---|---|---|
 | baseline | gpt-4o | 15% | 382,515 | 31,901 | $0.490 | 10 |
 | baseline | gpt-4o-mini | 20% | 469,632 | 32,016 | $0.037 | 4 |
-| baseline | gpt-5.6-luna | 45% | 375,037 | 34,242 | $0.076 | 7 |
-| tools | gpt-4o | 70% | 27,473 | 2,705 | $0.055 | 0 |
-| tools | gpt-4o-mini | 70% | 28,334 | 2,668 | $0.004 | 0 |
-| tools | gpt-5.6-luna | 75% | 30,169 | 2,860 | $0.007 | 0 |
+| baseline | gpt-5.6-luna | 50% | 375,037 | 34,242 | $0.076 | 6 |
+| tools | gpt-4o | 80% | 27,473 | 2,705 | $0.055 | 0 |
+| tools | gpt-4o-mini | 85% | 28,334 | 2,668 | $0.004 | 0 |
+| tools | gpt-5.6-luna | 95% | 30,169 | 2,860 | $0.007 | 0 |
 
 The baseline's prompt grows about 4× from the given catalog to this one, and its accuracy halves.
 
@@ -182,7 +182,7 @@ Each change below was driven by a failing conversation, and each moved a number.
 | `20261006-235916-hand-mini-2` | 24/25 | content-free queries got confident matches | `unsure` verdict calibrated on measured similarities; aliases removed from the full-text document (they have their own ranker) |
 | `20261007-000113-chen` | 4/4 | — | — |
 | stage 1 | tools 85–92% | children booked into adult visits; providers hidden by filters | age-aware type search; "exists but filtered" |
-| stage 4 | see below | — | — |
+| stage 4 | given: targeted cases 5/8→8/8 | proximity-tie and near-duplicate cases still model-dependent | see § Stage 4 |
 
 ## Grading-policy decisions made after seeing results
 
@@ -198,6 +198,14 @@ The judge is self-authored, so every change to it is listed here. Each change wa
    - Systems without lookup tools meet the same standard through the candidate names.
 5. **Refusal reasons are any-of.** If a request fails for several true reasons (no Dr. Chen here *and* the referral expired), stating any one of them passes. "far" is required only when no clinic at all is near the caller's place.
 6. **Typography.** Curly apostrophes are normalised. GPT-5.6 writes "doesn’t", and every negation pattern had been missing it.
+7. **Statements inside questions.** "Dr. Sato isn't accepting new patients; would you like another dermatologist?"
+   states the fact. A clause counts as a question only if it ends in "?" *and* opens like one ("Do you…", "Which…").
+   A read-back phrased "Your appointment is scheduled with… Is that correct?" is still a confirmation question, not
+   a false claim of booking. An audit of the flips this caused across 1,222 conversations found: 108 false
+   "claimed a booking" fails, introduced and then reverted; 10 not-accepting-new statements now recognised; 5 read-backs
+   saying "noon"; 1 not-offered statement.
+8. **Same person, two records.** Three personas match people already in the given catalog's registry (same name and
+   date of birth). Booking under that existing record is correct, and was wrongly flagged as "wrong patient" (27 conversations in stage 4).
 
 **Independent review.** An opus reviewer was asked to find false passes in the gate. It found 14 issues, including:
 - booking a slot other than the one read back;
@@ -210,9 +218,39 @@ All were fixed in `be7b2f8`, each with a regression test in `backend/tests/test_
 
 **The LLM quality judge does not separate the systems:** 4.77 for tools vs 4.65 for the baseline, while the gate separates them by 30–50 points. In stage 1 it averaged 4.58/5 on the 96 conversations that broke a safety invariant (5/5 on "recovery" for 78 of them, a mean of 4.5 or more for 72), against 4.78 for those that passed. That is the measured reason it is not the gate.
 
-## Stage 4: after the fixes
+## Stage 4: after the fixes (`20261007-010011-stage4-given-after`, `-variants-after`, `20261007-010058-ablation-novectors`)
 
-_(pending: `20261007-010011-stage4-given-after`, `20261007-010011-stage4-variants-after`, `20261007-010058-ablation-novectors`)_
+The same given-catalog matrix as stage 1 (tools agent only), after age-aware search, "exists but filtered", and the
+judge fixes. All runs on this page are judged by the same final judge.
+
+| model | stage 1 | stage 4 | invariant breaks (stage 4) | $/conv |
+|---|---|---|---|---|
+| gpt-4o | 92% | 95% | 0 | $0.050 |
+| gpt-4o-mini | 86% | 80% | 0 | $0.004 |
+| gpt-5.6-luna | 93% | 93% | 1 | $0.006 |
+| gpt-5.6-terra | 95% | 88% | 0 | $0.056 |
+
+**What the fixes targeted**, pass rate across all 4 models × 2 (stage 1 → stage 4):
+- maria-garcia-pediatrics (child's checkup): 5/8 → 8/8
+- spanish-pediatrician-sick-kid: 5/8 → 8/8
+- dental-cleaning-near-sunset: 6/8 → 8/8
+
+**What moved the other way** is within noise at N=2: the proximity-tie and gen-surname cases. The remaining hard case,
+gen-tie-1, has the caller say "follow-up consultation" (an exact type name). Most models still book "Follow-up Visit",
+its registered near-duplicate. The aggregate change per model is −7 to +3 points on 74 conversations, which is noise at
+this N; the targeted cases are the signal.
+
+**Variants after the fixes:** gen-collisions 83% / 86%, adv-referral-maze 66% / 77%, adv-near-dupes 60% / 71%
+(gpt-4o-mini / gpt-5.6-luna). This run used regenerated personas: the cluster goals no longer quote the tool's hint
+text. That removes an advantage the stage-2 personas gave the agent, so the two runs are not directly comparable.
+adv-near-dupes stays the weakest catalog: near-identical names with no data to separate them are a meaning problem
+that only the lexicon (aliases + registered clusters) fixes, and it was deliberately not tuned for that catalog.
+
+**End-to-end vector ablation** (gpt-4o-mini, given, N=2): **76%** without pgvector vs 86% / 80% with it (stages 1
+and 4). The direction matches the offline benchmark (29 vs 22 right of 40), but at this N the end-to-end difference
+is suggestive, not conclusive. The given personas mostly use phrases the curated alias table already covers, and
+that coverage is exactly why decision 009 put aliases first. Vectors earn their place on phrasing nobody curated,
+which the offline benchmark isolates.
 
 ## Limits of this evidence
 

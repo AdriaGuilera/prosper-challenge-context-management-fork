@@ -134,3 +134,11 @@ def test_wrong_patient_record(given):
     v = deterministic(_oracle("happy-flu-shot", given),
                       _flu_events("Dr. Sato at Sunset today at 9am, right?", "Yes."), b, given)
     assert any("record" in x for x in v["violations"])
+
+
+def test_a_statement_inside_a_question_still_states(given):
+    events = [agent("Hi"), caller("stress test"),
+              agent("That test needs a referral, and there's none on file; would you like to book something else?"),
+              caller("no"), agent("Okay, goodbye.")]
+    v = deterministic(_oracle("stress-test-shortcut", given), events, [], given)
+    assert "did not state: referral" not in v["failures"]
