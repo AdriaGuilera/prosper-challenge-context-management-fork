@@ -75,8 +75,8 @@ live side by side, and the eval runs them concurrently. Bookings and run-time pa
   patient states. Scrambling every specialty label moves zero triples.
 - Slots: the SQL slot query equals the Python reference computed over a calendar regenerated from the
   seed. Schedules never overlap per provider and never fall outside location hours.
-- Ingest of the given catalog takes about 0.1 s once embeddings are cached; 285 texts are embedded
-  (82 names plus 203 alias rows).
+- Ingest of the given catalog takes about 0.1 s once embeddings are cached; 285 texts were embedded
+  at first (82 names plus 203 alias rows); 299 after the lexicon grew (see § Measured after build).
 
 ## Measured after build
 
