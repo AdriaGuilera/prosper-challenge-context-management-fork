@@ -2,7 +2,8 @@
  "name": "gen-oddhours",
  "catalog": "catalog.json",
  "lexicon": [
-  "../lexicon.base.json"
+  "../lexicon.base.json",
+  "lexicon.json"
  ],
  "places": "places.json",
  "patients": "patients.json",

@@ -1,5 +1,51 @@
 {
  "aliases": {
+  "consult": [
+   "Consult - Extended"
+  ],
+  "extended": [
+   "Consult - Extended"
+  ],
+  "consult extended": [
+   "Consult - Extended"
+  ],
+  "follow up visit": [
+   "Follow-up Visit",
+   "Follow Up Visit (Short)"
+  ],
+  "short": [
+   "Follow Up Visit (Short)"
+  ],
+  "follow up visit short": [
+   "Follow Up Visit (Short)"
+  ],
+  "blood draw": [
+   "Blood Draw / Lab Work"
+  ],
+  "lab work": [
+   "Blood Draw / Lab Work"
+  ],
+  "blood draw lab work": [
+   "Blood Draw / Lab Work"
+  ],
+  "blood work": [
+   "Blood Work - Routine"
+  ],
+  "routine": [
+   "Blood Work - Routine"
+  ],
+  "blood work routine": [
+   "Blood Work - Routine"
+  ],
+  "ultrasound": [
+   "Ultrasound - Abdominal"
+  ],
+  "abdominal": [
+   "Ultrasound - Abdominal"
+  ],
+  "ultrasound abdominal": [
+   "Ultrasound - Abdominal"
+  ],
   "consultation": [
    "Consultation",
    "Initial Consultation",

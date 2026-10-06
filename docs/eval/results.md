@@ -257,5 +257,9 @@ which the offline benchmark isolates.
 - **Text only.** STT errors are simulated only by persona wording ("Ngyuen", "Gary") and the fuzzy and phonetic matchers. The voice demo was smoke-tested to start (`bot.py` serves the new tools against Postgres), not exercised with audio in this pass.
 - **A single simulator model** (gpt-4o) plays every caller. A different simulator would shift absolute numbers. Comparisons across agent models and systems are fair because it is held fixed.
 - **Small N.** N=2 on the given catalog and N=1 on the variants. A case at 1/2 is a finding, not a rate. The per-case tables in each run's summary.md show the distribution.
-- **Self-authored data.** The generated catalogs reuse the given catalog's vocabulary plus 40 synthetic types. The lexicon was not tuned per variant; that is deliberate, since the variants test transfer.
+- **Self-authored data.** The generated catalogs reuse the given catalog's vocabulary plus 40 synthetic types.
+  Each bundle layers its own `lexicon.json` over the shared base: hand-authored for gen-large and adv-near-dupes,
+  and for all of them aliases derived mechanically from their own type names ("EKG / Electrocardiogram" → "ekg").
+  The derived aliases were added after stages 1–4 ran, so those runs used base + hand-authored lexicons only.
+  The lexicon was not tuned per variant from failures; that is deliberate, since the variants test transfer.
 - **Grading tolerance.** "Soonest" is graded with 2 days of tolerance for acceptable. Ties in proximity accept either location.

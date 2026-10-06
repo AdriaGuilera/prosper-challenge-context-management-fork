@@ -1,0 +1,14 @@
+{
+ "aliases": {
+  "mri": [
+   "MRI - Knee"
+  ],
+  "knee": [
+   "MRI - Knee"
+  ],
+  "mri knee": [
+   "MRI - Knee"
+  ]
+ },
+ "clusters": []
+}

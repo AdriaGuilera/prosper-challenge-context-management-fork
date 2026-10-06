@@ -197,6 +197,24 @@ def _places(locations: list) -> dict:
     return out
 
 
+def derived_aliases(catalog: dict) -> dict:
+    """Catalog-specific aliases read off the catalog's own type names: the parts of
+    'EKG / Electrocardiogram' and 'Bone Density Scan (DEXA)', and names with their
+    punctuation spoken ('X-Ray' -> 'x ray'). Mechanical, so every bundle gets its own."""
+    import re
+    out: dict = {}
+    for t in catalog["appointment_types"]:
+        name = t["name"]
+        parts = [p.strip() for p in re.split(r"/|\(|\)| - ", name) if p.strip()]
+        for part in parts if len(parts) > 1 else []:
+            if len(part) >= 3:
+                out.setdefault(part.lower(), []).append(name)
+        spoken = re.sub(r"[^a-z0-9]+", " ", name.lower()).strip()
+        if spoken != name.lower():
+            out.setdefault(spoken, []).append(name)
+    return out
+
+
 def write_bundle(name: str, catalog: dict, places: dict, patients: list, calendar: dict,
                  lexicon: dict = None) -> Path:
     d = CATALOGS_DIR / name
@@ -207,10 +225,10 @@ def write_bundle(name: str, catalog: dict, places: dict, patients: list, calenda
     (d / "catalog.json").write_text(json.dumps(catalog, indent=1) + "\n")
     (d / "places.json").write_text(json.dumps(places, indent=1) + "\n")
     (d / "patients.json").write_text(json.dumps(patients, indent=1) + "\n")
-    lex_files = ["../lexicon.base.json"]
-    if lexicon:
-        (d / "lexicon.json").write_text(json.dumps(lexicon, indent=1) + "\n")
-        lex_files.append("lexicon.json")
+    lexicon = dict(lexicon or {"aliases": {}, "clusters": []})
+    lexicon["aliases"] = {**derived_aliases(catalog), **lexicon.get("aliases", {})}
+    (d / "lexicon.json").write_text(json.dumps(lexicon, indent=1) + "\n")
+    lex_files = ["../lexicon.base.json", "lexicon.json"]
     (d / "bundle.json").write_text(json.dumps({
         "name": name, "catalog": "catalog.json", "lexicon": lex_files, "places": "places.json",
         "patients": "patients.json", "calendar": calendar}, indent=1) + "\n")

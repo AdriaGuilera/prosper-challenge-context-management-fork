@@ -1,0 +1,127 @@
+{
+ "aliases": {
+  "follow up visit": [
+   "Follow-up Visit"
+  ],
+  "follow up consultation": [
+   "Follow-up Consultation"
+  ],
+  "telehealth follow up": [
+   "Telehealth Follow-up"
+  ],
+  "vaccination": [
+   "Vaccination / Immunization"
+  ],
+  "immunization": [
+   "Vaccination / Immunization"
+  ],
+  "vaccination immunization": [
+   "Vaccination / Immunization"
+  ],
+  "covid 19 vaccine": [
+   "COVID-19 Vaccine"
+  ],
+  "pre operative evaluation": [
+   "Pre-operative Evaluation"
+  ],
+  "well child visit": [
+   "Well-Child Visit"
+  ],
+  "ekg": [
+   "EKG / Electrocardiogram"
+  ],
+  "electrocardiogram": [
+   "EKG / Electrocardiogram"
+  ],
+  "ekg electrocardiogram": [
+   "EKG / Electrocardiogram"
+  ],
+  "acne follow up": [
+   "Acne Follow-up"
+  ],
+  "fracture follow up": [
+   "Fracture Follow-up"
+  ],
+  "pre surgical consultation": [
+   "Pre-surgical Consultation"
+  ],
+  "headache follow up": [
+   "Headache Follow-up"
+  ],
+  "gyn new patient visit": [
+   "OB/GYN New Patient Visit"
+  ],
+  "ob gyn new patient visit": [
+   "OB/GYN New Patient Visit"
+  ],
+  "annual well woman exam": [
+   "Annual Well-Woman Exam"
+  ],
+  "hearing test": [
+   "Hearing Test / Audiogram"
+  ],
+  "audiogram": [
+   "Hearing Test / Audiogram"
+  ],
+  "hearing test audiogram": [
+   "Hearing Test / Audiogram"
+  ],
+  "thyroid follow up": [
+   "Thyroid Follow-up"
+  ],
+  "x ray": [
+   "X-Ray"
+  ],
+  "mri": [
+   "MRI - Brain",
+   "MRI - Spine",
+   "MRI - Knee"
+  ],
+  "brain": [
+   "MRI - Brain"
+  ],
+  "mri brain": [
+   "MRI - Brain"
+  ],
+  "spine": [
+   "MRI - Spine"
+  ],
+  "mri spine": [
+   "MRI - Spine"
+  ],
+  "knee": [
+   "MRI - Knee"
+  ],
+  "mri knee": [
+   "MRI - Knee"
+  ],
+  "bone density scan": [
+   "Bone Density Scan (DEXA)"
+  ],
+  "dexa": [
+   "Bone Density Scan (DEXA)"
+  ],
+  "bone density scan dexa": [
+   "Bone Density Scan (DEXA)"
+  ],
+  "blood draw": [
+   "Blood Draw / Lab Work"
+  ],
+  "lab work": [
+   "Blood Draw / Lab Work"
+  ],
+  "blood draw lab work": [
+   "Blood Draw / Lab Work"
+  ],
+  "spirometry": [
+   "Spirometry / Lung Function Test"
+  ],
+  "lung function test": [
+   "Spirometry / Lung Function Test"
+  ],
+  "spirometry lung function test": [
+   "Spirometry / Lung Function Test"
+  ]
+ },
+ "clusters": []
+}
