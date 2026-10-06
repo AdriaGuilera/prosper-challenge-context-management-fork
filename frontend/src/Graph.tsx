@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -130,6 +130,10 @@ export function Graph({ agent, trace, selection, flagged, locked, onSelect, onMo
   const active = trace.activeNode
   const activeNode = agent.nodes.find((n) => n.name === active)
   const nextTargets = new Set(live ? activeNode?.edges.map((e) => e.target) ?? [] : [])
+  // Nodes are rebuilt from the agent on every edit. Without their measured size React Flow
+  // treats each rebuilt node as new, hides it and drops its handles until it re-measures,
+  // which made the whole graph blink while dragging. Keep the sizes and hand them back.
+  const sizes = useRef(new Map<string, { width: number; height: number }>())
 
   const nodes: FlowNode<CircuitData>[] = useMemo(
     () =>
@@ -142,6 +146,7 @@ export function Graph({ agent, trace, selection, flagged, locked, onSelect, onMo
           id: n.name,
           type: 'circuit',
           position: n.ui?.position ?? { x: (i % 4) * 340, y: Math.floor(i / 4) * 240 },
+          measured: sizes.current.get(n.name),
           selected: selection.kind === 'node' && selection.name === n.name,
           draggable: !locked,
           data: {
@@ -183,7 +188,8 @@ export function Graph({ agent, trace, selection, flagged, locked, onSelect, onMo
   const handleNodesChange = useCallback(
     (changes: NodeChange<FlowNode<CircuitData>>[]) => {
       for (const c of changes) {
-        if (c.type === 'position' && c.position) onMove(c.id, c.position)
+        if (c.type === 'dimensions' && c.dimensions) sizes.current.set(c.id, c.dimensions)
+        else if (c.type === 'position' && c.position) onMove(c.id, c.position)
       }
     },
     [onMove],
