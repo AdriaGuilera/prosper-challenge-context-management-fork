@@ -75,7 +75,8 @@ async def converse(job: dict, max_turns: int) -> dict:
         log(dict(e))
 
     persona, bundle = job["persona"], job["bundle"]
-    ctx = ToolContext(catalog=bundle.name, scope=job["scope"], clock=lambda: job["clock"])
+    ctx = ToolContext(catalog=bundle.name, scope=job["scope"], clock=lambda: job["clock"],
+                      use_vectors=job.get("use_vectors", True))
     config = baseline_config(bundle, job["model"]) if job["system"] == "baseline" else json.loads(AGENT_PATH.read_text())
     config["model"] = job["model"]
     builder = AgentBuilder.from_dict(config)
@@ -146,7 +147,8 @@ async def run_job(job: dict, sem, out_dir: Path, max_turns: int, results: list, 
         row = {
             "job": job["id"], "catalog": job["bundle"].name, "persona": job["persona"]["id"],
             "source": job["persona"].get("source", "hand"), "tags": job["persona"].get("tags", []),
-            "behavior": job["behavior"]["name"], "model": job["model"], "system": job["system"], "rep": job["rep"],
+            "behavior": job["behavior"]["name"], "model": job["model"],
+            "system": job["system"] + ("" if job.get("use_vectors", True) else "-novec"), "rep": job["rep"],
             "pass": res["verdict"]["pass"], "tier": res["verdict"]["tier"], "score": res["verdict"]["score"],
             "violations": res["verdict"]["violations"], "failures": res["verdict"]["failures"],
             "tier_reasons": res["verdict"]["tier_reasons"], "booking": res["verdict"]["booking"],
@@ -179,6 +181,7 @@ async def main(argv=None) -> None:
     ap.add_argument("--concurrency", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=16)
     ap.add_argument("--label", default="")
+    ap.add_argument("--no-vectors", action="store_true", help="ablation: type search without pgvector (alias + full text)")
     args = ap.parse_args(argv)
 
     names = list_bundles() if args.catalog == "all" else args.catalog.split(",")
@@ -223,6 +226,7 @@ async def main(argv=None) -> None:
                                 "id": jid, "persona": persona, "bundle": bundle, "cv": cv, "anchor": anchor,
                                 "clock": clock, "behavior": behaviors[b], "model": model, "system": system,
                                 "rep": rep, "scope": f"eval-{uuid.uuid4().hex[:12]}", "llm_judge": args.llm_judge,
+                                "use_vectors": not args.no_vectors,
                             })
     random.Random(0).shuffle(jobs)  # spread models and catalogs over time (rate limits)
     meta = {"run_id": run_id, "args": vars(args), "jobs": len(jobs), "catalogs": names, "models": models,
