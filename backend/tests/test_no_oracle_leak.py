@@ -47,7 +47,7 @@ def test_no_oracle_leak(bundle, persona):
             facts += item.get("locations", []) + item.get("open_locations", []) + item.get("providers", [])
         for fact in facts:
             assert fact.lower() not in low or fact.lower() in caller_text, f"oracle fact '{fact}' leaked"
-        for st in oracle.must_state:
+        for st in [k for entry in oracle.must_state for k in entry.split("|")]:
             phrase = st.replace("_", " ")
             if not re.search(rf"\b{phrase}", caller_text):
                 assert not re.search(rf"\b{phrase}\b", low), f"the expected statement '{st}' leaked"

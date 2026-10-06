@@ -20,7 +20,8 @@ from .oracle import TIERS, Oracle, grade_booking
 STATE_PATTERNS = {
     "referral": r"referr",
     "not_offered": r"(don'?t|do not|doesn'?t|does not|not)\s+(currently\s+)?(offer|have|provide|do|carry)|"
-                   r"not (available|offered)|unable to (book|schedule)|can'?t (book|schedule)|no (one|provider|doctor)s? (here|at)",
+                   r"not (available|offered)|unable to (book|schedule)|can'?t (book|schedule)|no (one|provider|doctor)s? (here|at)|"
+                   r"only (offer|have|do|provide)|we (offer|have|do) [^.?!]{0,50}, not ",
     "not_accepting_new": r"(not|isn'?t|aren'?t|n'?t)\s+(currently\s+)?(accepting|taking|seeing)\s+(any\s+)?new|panel is (full|closed)",
     "new_patient": r"new patient",
     "far": r"(nothing|no (clinic|location|office|site)s?|none of our|don'?t have any)[^.?!]{0,60}(near|close)|"
@@ -81,6 +82,11 @@ def _declarative(text: str) -> str:
 
 def _sentences(text: str, must_contain: str) -> list:
     return [p for p in re.split(r"(?<=[.!?])\s+", text) if must_contain in p.lower() and not p.strip().endswith("?")]
+
+
+def _states(entry: str, text: str) -> bool:
+    """A must_state entry is one reason or an any-of group 'a|b'."""
+    return any(re.search(STATE_PATTERNS.get(k, k), text, re.I) for k in entry.split("|"))
 
 
 def _labels_named(text: str, labels: list) -> int:
@@ -200,8 +206,8 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
     before_booking = events[:booked_at] if booked_at is not None else events
     if "booked a different visit the caller agreed to" in tier_reasons:
         said = _declarative(" ".join(e["text"] for e in before_booking if e["type"] == "agent"))
-        stated = all(re.search(STATE_PATTERNS.get(st, st), said, re.I) for st in o.must_state)
-        if not o.type_tier or not stated:
+        stated = all(_states(st, said) for st in o.must_state)
+        if not stated:
             tier, tier_reasons = "wrong", ["booked something else without first explaining why the request can't be booked"]
 
     # ---- required questions: asked BEFORE booking, naming two of the actual choices -----------
@@ -246,7 +252,7 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
     agent_all = " ".join(e["text"] for e in events if e["type"] == "agent")
     stated_text = _declarative(agent_all)
     for st in o.must_state:
-        if not re.search(STATE_PATTERNS.get(st, st), stated_text, re.I):
+        if not _states(st, stated_text):
             failures.append(f"did not state: {st}")
 
     # ---- information answers, read from the sentences about the thing asked -------------------

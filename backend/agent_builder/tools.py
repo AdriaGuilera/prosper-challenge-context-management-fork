@@ -311,8 +311,22 @@ async def find_providers(args: dict, ctx: ToolContext, conn) -> dict:
         out = {"status": "confirm", **out,
                "instruction": "Closest name only, not an exact match. Confirm the name with the caller."}
     elif not rows:
-        out = {"status": "no_match", **out,
-               "instruction": "No provider by that name. Say so; don't guess. Offer to search by specialty."}
+        filtered = (specialty or type_id or location_id or language or accepting is not None)
+        exists = await conn.fetch(
+            "SELECT name, specialty, accepting_new_patients FROM providers WHERE catalog_version = $1 "
+            "AND name_score($2, search_name) >= 0.6 ORDER BY name_score($2, search_name) DESC LIMIT 3",
+            ctx.cv, q) if q and filtered else []
+        if exists:
+            # a filter must never make a real person disappear: say who it is and why they don't fit
+            who = "; ".join(f"{r['name']} ({r['specialty']}"
+                            + ("" if r["accepting_new_patients"] else ", not accepting new patients") + ")"
+                            for r in exists)
+            out = {"status": "exists_but_filtered", **out, "named_providers": who,
+                   "instruction": f"That provider exists ({who}) but doesn't match what you filtered on. "
+                                  "Tell the caller exactly why they can't book with them, then offer alternatives."}
+        else:
+            out = {"status": "no_match", **out,
+                   "instruction": "No provider by that name. Say so; don't guess. Offer to search by specialty."}
     return out
 
 

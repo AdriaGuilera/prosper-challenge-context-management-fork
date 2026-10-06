@@ -201,8 +201,8 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
         if dist:
             best = min(dist[tr[1]] for tr in target)
             o.best_locations = {tr[1] for tr in target if dist[tr[1]] - best <= TIE_KM}
-            if best > bundle.gazetteer.get("far_km", 9.0):
-                o.must_state.append("far")
+            if min(dist.values()) > bundle.gazetteer.get("far_km", 9.0):
+                o.must_state.append("far")   # nothing at all near the caller's place
             if len(o.best_locations) > 1:
                 o.notes.append("proximity tie: " + ", ".join(sorted(o.best_locations)))
 
@@ -234,25 +234,26 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
 
 
 def _why_not(bundle: Bundle, o: Oracle, pspec: Optional[dict], structural: set) -> list:
+    """Every true reason the request can't be booked, as ONE any-of entry ("a|b"): stating any
+    true reason is correct; the agent is not graded on picking our favourite."""
+    reasons = []
     wanted = set(o.type_tier)
     offered = {tr for tr in structural if tr[2] in wanted}
+    if pspec and o.provider_strict and pspec.get("name") and not o.provider_match:
+        reasons.append("no_provider")
     if not wanted or not offered:
-        return ["not_offered"]
-    if pspec and o.provider_strict:
-        if not o.provider_match:
-            return ["no_provider"]
-        if not {tr for tr in offered if tr[0] in o.provider_match}:
-            return ["provider_cannot"]
-    reasons = []
+        reasons.append("not_offered")
+    if pspec and o.provider_strict and o.provider_match and not {tr for tr in offered if tr[0] in o.provider_match}:
+        reasons += ["provider_cannot", "no_provider"]
     pool = {tr for tr in offered if not pspec or not o.provider_strict or tr[0] in o.provider_match}
     problems = [set(triple_problems(bundle.catalog, *tr, patient=o.patient)) for tr in pool]
     if any("referral_required" in p for p in problems):
         reasons.append("referral")
     new_blocked = [p for p in problems if p & {"type_closed_to_new_patients", "provider_not_accepting_new_patients"}]
     if new_blocked:
-        only_provider = all("type_closed_to_new_patients" not in p for p in new_blocked)
-        reasons.append("not_accepting_new" if only_provider else "new_patient")
-    return reasons or ["cannot_book"]
+        reasons += ["not_accepting_new", "new_patient"]
+    reasons = list(dict.fromkeys(reasons)) or ["cannot_book"]
+    return ["|".join(reasons)]
 
 
 _CALENDARS: dict = {}
@@ -343,9 +344,11 @@ def grade_booking(o: Oracle, booking: Optional[dict], bundle: Bundle) -> tuple:
     if o.outcome == "no_booking":
         if booking is None:
             return "ideal", []
-        if booking["appointment_type_id"] not in o.type_tier and not triple_problems(
-                bundle.catalog, booking["provider_id"], booking["location_id"], booking["appointment_type_id"], patient=o.patient):
-            # the wanted visit was correctly refused; the caller then took a different, valid one
+        if not triple_problems(bundle.catalog, booking["provider_id"], booking["location_id"],
+                               booking["appointment_type_id"], patient=o.patient):
+            # the request as stated couldn't be met; the caller then took a valid alternative
+            # (another visit, another doctor). The judge only accepts this if the reason was
+            # said before the booking.
             return "acceptable", ["booked a different visit the caller agreed to"]
         return "wrong", ["booked something the oracle says can't be booked"]
     if booking is None:
