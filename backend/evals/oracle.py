@@ -46,6 +46,7 @@ class Oracle:
     must_state: list = field(default_factory=list)
     info: list = field(default_factory=list)       # resolved information expectations
     ask_labels: dict = field(default_factory=dict)  # must_ask -> words a question that asks it would name
+    patient_ref: Optional[str] = None               # the record a booking must land on: seeded id, or "new"
     notes: list = field(default_factory=list)
 
     def summary(self) -> dict:
@@ -112,6 +113,11 @@ def provider_matches(bundle: Bundle, spec: dict) -> set:
 # ---- the oracle ------------------------------------------------------------------------
 
 
+def seeded_patient_id(name: str) -> str:
+    """The registry id the eval seeds for an existing persona (evals/run.py)."""
+    return "pat_" + normalize(name).replace(" ", "_")
+
+
 def patient_state(bundle: Bundle, record: dict, clock: datetime) -> PatientState:
     ids_by_name = bundle.type_ids_by_name()
     refs = set()
@@ -129,6 +135,8 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
     cat = bundle.catalog
     patient = patient_state(bundle, persona["caller"].get("record", {}), clock)
     o = Oracle(persona["id"], bundle.name, exp["outcome"], patient)
+    rec = persona["caller"].get("record", {})
+    o.patient_ref = seeded_patient_id(persona["caller"]["name"]) if rec.get("existing") else "new"
     ids_by_name = bundle.type_ids_by_name()
     for tier in ("ideal", "acceptable", "suboptimal"):
         for name in exp.get("types", {}).get(tier, []):
@@ -170,7 +178,16 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
                 o.ask_labels["provider_says"] = normalize(pspec.get("says") or pspec["name"]).split()[-1]
                 o.ask_labels["provider"] = sorted({normalize(provs[p]["name"].replace("Dr.", "")).split()[0] for p in offering}
                                                   | {provs[p]["specialty"].lower() for p in offering})
+    # aim at the best tier that can actually be booked: if no ideal/acceptable type is bookable
+    # here but a suboptimal one is, that one becomes the acceptable answer for this catalog
+    good = {tr for tr in constrained if o.type_tier.get(tr[2]) in ("ideal", "acceptable")}
+    if constrained and not good:
+        for tr in constrained:
+            o.type_tier[tr[2]] = "acceptable"
+        o.notes.append("only a suboptimal type is bookable in this catalog; promoted to acceptable")
+        good = set(constrained)
     o.constrained = constrained
+    target = good or constrained   # place and time are judged against the best bookable tier
 
     if o.outcome == "booking" and not constrained:
         o.outcome = "no_booking"
@@ -182,8 +199,8 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
     if exp.get("near") and constrained:
         dist = distances(bundle, exp["near"])
         if dist:
-            best = min(dist[tr[1]] for tr in constrained)
-            o.best_locations = {tr[1] for tr in constrained if dist[tr[1]] - best <= TIE_KM}
+            best = min(dist[tr[1]] for tr in target)
+            o.best_locations = {tr[1] for tr in target if dist[tr[1]] - best <= TIE_KM}
             if best > bundle.gazetteer.get("far_km", 9.0):
                 o.must_state.append("far")
             if len(o.best_locations) > 1:
@@ -194,7 +211,7 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
     if exp.get("on_or_after"):
         o.on_or_after = date.fromisoformat(exp["on_or_after"])
     if exp.get("time") == "soonest" and constrained:
-        o.soonest = _soonest(bundle, anchor, clock, constrained, o)
+        o.soonest = _soonest(bundle, anchor, clock, target, o)
 
     # registered-cluster asks only apply where the cluster exists among offered types
     for ask in exp.get("must_ask", []):
@@ -298,6 +315,8 @@ def _resolve_info(bundle: Bundle, item: dict) -> dict:
                 "open": bool(intervals), "opens": [fmt(a) for a, _ in intervals]}
     if "nearest_to" in item:
         dist = distances(bundle, item["nearest_to"])
+        if not dist:
+            return {"kind": "nearest_to", "place": item["nearest_to"], "locations": []}
         best = min(dist.values())
         names = {l["id"]: l["name"] for l in cat["locations"]}
         return {"kind": "nearest_to", "place": item["nearest_to"],

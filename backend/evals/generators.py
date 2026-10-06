@@ -114,7 +114,7 @@ class _Gen:
             refs = [target] if self.types[tid]["requires_referral"] else []
             ccall = self.caller(True, refs)
             ccall.update({
-                "goal": f"Book a {phrase}. What you actually need: {c['hints'].get(target, target)}."
+                "goal": f"Book a {phrase}. You know what you need when someone asks you about it."
                         + (" You have a referral for it." if refs else ""),
                 "opening": f"Hi, I'm calling to book something, it's about {phrase}.",
                 "answers": {"what exactly you need": c["hints"].get(target, target)},

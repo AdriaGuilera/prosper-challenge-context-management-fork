@@ -41,9 +41,6 @@
       "strict": true,
       "says": "Chen"
     },
-    "near": "Downtown",
-    "must_ask": [
-      "provider"
-    ]
+    "near": "Downtown"
   }
 }

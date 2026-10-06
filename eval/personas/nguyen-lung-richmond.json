@@ -40,9 +40,6 @@
       "specialty": "Pulmonology",
       "strict": true
     },
-    "near": "Richmond",
-    "must_ask": [
-      "provider"
-    ]
+    "near": "Richmond"
   }
 }

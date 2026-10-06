@@ -32,7 +32,7 @@ from store.bundle import list_bundles, load_bundle, normalize  # noqa: E402
 from . import judge as judges  # noqa: E402
 from .baseline import baseline_config  # noqa: E402
 from .generators import generate_personas  # noqa: E402
-from .oracle import compute_oracle  # noqa: E402
+from .oracle import compute_oracle, seeded_patient_id  # noqa: E402
 from .personas import EVAL_DIR, load_behaviors, load_for_simulator, load_personas  # noqa: E402
 from .report import write_summary  # noqa: E402
 from .runner import FlowRunner  # noqa: E402
@@ -47,7 +47,7 @@ async def seed_patient(conn, cv: str, scope: str, persona: dict, bundle) -> None
     rec = caller.get("record", {})
     if not rec.get("existing"):
         return
-    pid = "pat_" + normalize(caller["name"]).replace(" ", "_")
+    pid = seeded_patient_id(caller["name"])
     await conn.execute("INSERT INTO patients VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
                        cv, scope, pid, caller["name"], normalize(caller["name"]), date.fromisoformat(caller["dob"]))
     ids_by_name = bundle.type_ids_by_name()
@@ -106,7 +106,7 @@ async def converse(job: dict, max_turns: int) -> dict:
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            """SELECT confirmation, provider_id, location_id, appointment_type_id, starts_at FROM appointments
+            """SELECT confirmation, patient_id, provider_id, location_id, appointment_type_id, starts_at FROM appointments
                WHERE catalog_version = $1 AND scope = $2 AND status = 'booked' ORDER BY id""", job["cv"], job["scope"])
         bookings = [dict(r) for r in rows]
         await cleanup(conn, job["cv"], job["scope"])
@@ -117,7 +117,7 @@ async def converse(job: dict, max_turns: int) -> dict:
         verdict["pass"] = False
         verdict["failures"].append(f"conversation error: {error}")
     quality = await judges.llm_quality(events, meter=log) if job["llm_judge"] else None
-    return {"events": events, "verdict": verdict, "quality": quality, "oracle": oracle.summary(),
+    return {"events": events, "verdict": verdict, "quality": quality, "oracle": oracle.summary(), "bookings": bookings,
             "context_chars": runner.context_chars(), "ended": runner.ended, "error": error}
 
 
@@ -154,7 +154,8 @@ async def run_job(job: dict, sem, out_dir: Path, max_turns: int, results: list, 
             "wall_s": round(time.perf_counter() - started, 1), **metrics(res["events"], job["model"]),
         }
         (out_dir / "transcripts" / f"{job['id']}.json").write_text(json.dumps(
-            {"row": row, "persona": job["persona"], "events": res["events"]}, indent=1, default=str))
+            {"row": row, "persona": job["persona"], "events": res["events"], "bookings": res["bookings"],
+             "anchor": job["anchor"].isoformat(), "clock": job["clock"].isoformat()}, indent=1, default=str))
         results.append(row)
         with (out_dir / "results.jsonl").open("a") as f:
             f.write(json.dumps(row, default=str) + "\n")

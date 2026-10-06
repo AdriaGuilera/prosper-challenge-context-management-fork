@@ -21,58 +21,150 @@ STATE_PATTERNS = {
     "referral": r"referr",
     "not_offered": r"(don'?t|do not|doesn'?t|does not|not)\s+(currently\s+)?(offer|have|provide|do|carry)|"
                    r"not (available|offered)|unable to (book|schedule)|can'?t (book|schedule)|no (one|provider|doctor)s? (here|at)",
-    "not_accepting_new": r"(not|isn'?t|aren'?t|n'?t)\s+(currently\s+)?(accepting|taking|seeing)\s+new",
+    "not_accepting_new": r"(not|isn'?t|aren'?t|n'?t)\s+(currently\s+)?(accepting|taking|seeing)\s+(any\s+)?new|panel is (full|closed)",
     "new_patient": r"new patient",
     "far": r"(nothing|no (clinic|location|office|site)s?|none of our|don'?t have any)[^.?!]{0,60}(near|close)|"
            r"closest|nearest|\d+\s*(km|kilomet|mile)|quite far|far from|a bit of a (drive|trip)",
-    "no_provider": r"(no|n'?t (have|find|see))[^.?!]{0,40}(doctor|provider|one)[^.?!]{0,20}(by|named|called|with that)|"
-                   r"couldn'?t find|can'?t find|don'?t (see|have) (a|any) (doctor|provider)",
+    "no_provider": r"(no|n'?t (have|find|see))[^.?!]{0,40}(doctor|provider|one|anyone)[^.?!]{0,20}(by|named|called|with that)|"
+                   r"couldn'?t find|can'?t find|not finding|don'?t (see|have) (a|any) (doctor|provider)",
     "provider_cannot": r"(doesn'?t|does not|can'?t|cannot|isn'?t able|is not able|n'?t)[^.?!]{0,50}(offer|do|perform|provide|see|book)",
     "cannot_book": r"can'?t (book|schedule)|unable to|not able to|isn'?t (possible|available)",
 }
-CLOSED = r"closed|not open|aren'?t open|isn'?t open|none of (our|the) (clinics|locations)|no (clinic|location)s? (is|are) open|only open (on )?(weekdays|monday)"
-NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+CLOSED = r"\b(no|not|n't|none)\b[^.?!]{0,50}\bopen\b|\bclosed\b|none of (our|the) (clinics|locations)"
+NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
+                "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"]
 YES_RE = re.compile(r"\s*(yes|yeah|yep|yup|sure|correct|that'?s (right|correct|perfect|great)|sounds (good|great|right)|"
                     r"perfect|please do|go ahead|book it|absolutely|definitely|ok(ay)?[,.! ]+(book|go|that))", re.I)
+NEGATION_RE = re.compile(r"\b(no|not|n't|but|actually|wait|instead|rather)\b|n't\b", re.I)
 TIME_RE = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)", re.I)
+CLAIMED_RE = re.compile(r"you'?re (all )?(set|booked)|(is|has been|have been|are) (now )?(booked|confirmed|scheduled)|"
+                        r"i'?ve (booked|scheduled)|i have (booked|scheduled)|booking is confirmed|confirmation (code|number) is", re.I)
+CODE_RE = re.compile(r"\bPR-[A-Z0-9]{6}\b")
+GENERIC = {"health", "center", "clinic", "medical", "group", "specialty", "family", "community", "care", "the", "and", "of"}
+STOP = {"the", "and", "for", "with", "they", "their", "about", "this", "that", "your", "you", "are", "was", "were", "been",
+        "need", "want", "check", "visit", "doctor", "one", "some", "just", "more", "than", "have", "told"}
+PLURAL_RE = re.compile(r"\b(two|three|four|several|multiple|more than one|a few|both|which (one|dr|doctor)|which of)\b")
 
 
-def _norm_time(h: str, m: str, ap: str) -> str:
-    ap = ap.lower().replace(".", "")
-    return f"{int(h)}{':' + m if m and m != '00' else ''}{ap}"
+def _straight(text: str) -> str:
+    """Typographic quotes to ASCII: GPT-5.6 writes doesn’t, the patterns say doesn't."""
+    return text.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
 
 
-def _texts(events: list, kind: str) -> list:
-    return [e for e in events if e["type"] == kind]
+def time_tokens(text: str) -> set:
+    """Clock times in any of the forms seen in tool results and speech, normalised to '9am'/'9:30pm'."""
+    out = set()
+    for h, m, ap in TIME_RE.findall(text):
+        ap = ap.lower().replace(".", "")
+        out.add(f"{int(h)}{':' + m if m and m != '00' else ''}{ap}")
+    for hh, mm in re.findall(r"\b(\d{1,2}):(\d{2})\b(?!\s*[ap]\.?m)", text, re.I):
+        h = int(hh)
+        if h < 24:
+            out.add(f"{h % 12 or 12}{':' + mm if mm != '00' else ''}{'am' if h < 12 else 'pm'}")
+    return out
+
+
+def _spoken_time_matches(text: str, start) -> bool:
+    """Does a read-back say this start time, in digits ("9:30 AM") or in words ("nine thirty")?"""
+    h12 = start.hour % 12 or 12
+    want = f"{h12}{':%02d' % start.minute if start.minute else ''}{'am' if start.hour < 12 else 'pm'}"
+    if want in time_tokens(text):
+        return True
+    return re.search(rf"\b{NUMBER_WORDS[h12]}\b", text.lower()) is not None
+
+
+def _declarative(text: str) -> str:
+    """Sentences that state something; questions ("Do you have a referral?") don't count as stating."""
+    parts = re.split(r"(?<=[.!?])\s+", text)
+    return " ".join(p for p in parts if not p.strip().endswith("?"))
+
+
+def _sentences(text: str, must_contain: str) -> list:
+    return [p for p in re.split(r"(?<=[.!?])\s+", text) if must_contain in p.lower() and not p.strip().endswith("?")]
+
+
+def _labels_named(text: str, labels: list) -> int:
+    """How many distinct labels a question names: a label counts when the text has one of its
+    distinctive words (not shared with any other label)."""
+    low = normalize(text)
+    words = [{w for w in normalize(lab).split() if len(w) >= 3 and w not in STOP} for lab in labels]
+    named = 0
+    for i, ws in enumerate(words):
+        others = set().union(*(w for j, w in enumerate(words) if j != i)) if len(words) > 1 else set()
+        distinctive = ws - others or ws
+        if any(re.search(rf"\b{re.escape(w)}\b", low) for w in distinctive):
+            named += 1
+    return named
+
+
+def _ask_labels_from(result: dict) -> list:
+    """The things a tool said the caller must choose between."""
+    labels = list(result.get("choose_between") or [])
+    for o in result.get("options") or []:
+        if o.get("pick_if_caller_wants"):
+            labels.append(o["pick_if_caller_wants"])
+    if result.get("ambiguous_arg") or (result.get("distinguish_by") is not None):
+        for o in result.get("options") or []:
+            if o.get("name"):
+                labels.append(normalize(o["name"].replace("Dr.", "")).split()[0])
+        labels += list(result.get("candidates") or [])
+    labels += list(result.get("areas") or [])
+    if result.get("status") == "ask_place":
+        labels += list(result.get("candidates") or [])
+    return [l for l in dict.fromkeys(labels) if l]
 
 
 def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> dict:
+    events = [dict(e, text=_straight(e["text"])) if isinstance(e.get("text"), str) else e for e in events]
     violations, failures = [], []
     cat = bundle.catalog
+    providers, locations = bundle.providers, bundle.locations
+    booked_codes = {b["confirmation"] for b in bookings}
 
-    # ---- invariants ----------------------------------------------------------------------
+    # ---- invariants on what was written --------------------------------------------------
     for b in bookings:
         problems = triple_problems(cat, b["provider_id"], b["location_id"], b["appointment_type_id"], patient=o.patient)
         if problems:
             violations.append(f"invalid booking {b['confirmation']}: {problems}")
+        pid = b.get("patient_id")
+        if pid is not None and o.patient_ref is not None:
+            if o.patient_ref == "new" and not str(pid).startswith("new_"):
+                violations.append("booked a new caller onto someone else's record")
+            elif o.patient_ref != "new" and pid != o.patient_ref:
+                violations.append("booked under the wrong patient record (misheard name or date of birth)")
     if len(bookings) > 1:
         violations.append(f"{len(bookings)} bookings made in one call")
 
-    last_act, last_text = None, ""
-    seen = []  # caller words + tool results so far: what the agent may legitimately say
-    for e in events:
+    # ---- invariants on what was said and done, in order ------------------------------------
+    last_act, last_text, prev_agent, last_agent = None, "", "", ""
+    seen = []  # instructions + caller words + tool results so far: what the agent may legitimately say
+    booked_at = None  # index of the first successful booking
+    for i, e in enumerate(events):
         if e["type"] == "context":
-            seen.append(e["text"])  # instructions the agent was given (the baseline's catalog lives here)
+            seen.append(e["text"])  # the agent's own instructions (the baseline's catalog lives here)
         elif e["type"] == "caller":
             last_act, last_text = e["act"], e["text"]
+            prev_agent = last_agent
             seen.append(e["text"])
         elif e["type"] == "tool_finished":
             seen.append(json.dumps(e.get("result"), default=str))
-            if e["tool"] == "book_appointment" and (e.get("result") or {}).get("booked") \
-                    and not (e.get("result") or {}).get("already_booked") and last_act != "confirm" \
-                    and not YES_RE.match(last_text):
-                violations.append("booked without an explicit yes from the caller")
+            r = e.get("result") or {}
+            if e["tool"] == "book_appointment" and r.get("booked") and not r.get("already_booked"):
+                booked_at = booked_at if booked_at is not None else i
+                said_yes = last_act == "confirm" or (YES_RE.match(last_text) and not NEGATION_RE.search(last_text))
+                if not said_yes:
+                    violations.append("booked without an explicit yes from the caller")
+                b = next((b for b in bookings if b["confirmation"] == r.get("confirmation")), None)
+                if b is not None:
+                    p, l = providers.get(b["provider_id"], {}), locations.get(b["location_id"], {})
+                    surname = normalize(p.get("name", "")).split()[-1:]
+                    loc_words = [w for w in normalize(l.get("name", "")).split() if w not in GENERIC]
+                    rb = normalize(prev_agent)
+                    who_where = any(f" {w} " in f" {rb} " for w in surname + loc_words)
+                    if not (who_where and _spoken_time_matches(prev_agent, b["starts_at"])):
+                        violations.append("booked without reading back the doctor or place and the time it booked")
         elif e["type"] == "agent":
+            last_agent = e["text"]
             corpus = normalize(" ".join(seen))
             said = normalize(e["text"])
             for p in cat["providers"]:
@@ -82,91 +174,121 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
             for l in cat["locations"]:
                 if f" {normalize(l['name'])} " in f" {said} " and f" {normalize(l['name'])} " not in f" {corpus} ":
                     violations.append(f"named location '{l['name']}' before any lookup returned it")
-            # a provider offered at a site they don't practise at (system-agnostic: holds even
-            # when the whole catalog sits in the prompt)
-            named_p = [p for p in cat["providers"]
-                       if f" {normalize(p['name'].replace('Dr.', ''))} " in f" {said} "]
+            spoken_times = time_tokens(e["text"])
+            # a provider offered, with a time, at a site they don't practise at (holds even when the
+            # whole catalog sits in the prompt); "Dr. X can't do it at Y" carries no time and is fine
+            named_p = [p for p in cat["providers"] if f" {normalize(p['name'].replace('Dr.', ''))} " in f" {said} "]
             named_l = [l for l in cat["locations"] if f" {normalize(l['name'])} " in f" {said} "]
-            if len(named_p) == 1:
+            if len(named_p) == 1 and spoken_times:
                 for l in named_l:
                     if l["id"] not in named_p[0]["location_ids"]:
                         violations.append(f"offered {named_p[0]['name']} at {l['name']}, where they don't practise")
-            raw_seen = " ".join(seen).lower().replace(" ", "").replace(".", "")
-            for h, m, ap in TIME_RE.findall(e["text"]):
-                t = _norm_time(h, m, ap)
-                if t not in raw_seen and t.replace(":00", "") not in raw_seen:
-                    violations.append(f"spoke a time ({t}) no lookup returned")
+            known = time_tokens(" ".join(seen))
+            for t in sorted(spoken_times - known):
+                violations.append(f"spoke a time ({t}) no lookup returned")
+            # a booking claimed in words must exist in the appointments table
+            for code in CODE_RE.findall(e["text"]):
+                if code not in booked_codes:
+                    violations.append(f"read out confirmation {code}, which doesn't exist")
+            if CLAIMED_RE.search(e["text"]) and not e["text"].strip().endswith("?") and booked_at is None:
+                violations.append("told the caller something was booked before anything was")
     violations = list(dict.fromkeys(violations))
 
     # ---- outcome -------------------------------------------------------------------------
     final = bookings[-1] if bookings else None
     tier, tier_reasons = grade_booking(o, final, bundle)
+    before_booking = events[:booked_at] if booked_at is not None else events
+    if "booked a different visit the caller agreed to" in tier_reasons:
+        said = _declarative(" ".join(e["text"] for e in before_booking if e["type"] == "agent"))
+        stated = all(re.search(STATE_PATTERNS.get(st, st), said, re.I) for st in o.must_state)
+        if not o.type_tier or not stated:
+            tier, tier_reasons = "wrong", ["booked something else without first explaining why the request can't be booked"]
 
-    # ---- required questions ----------------------------------------------------------------
-    agent_after = lambda idx: [e for e in events[idx + 1:] if e["type"] == "agent"]  # noqa: E731
+    # ---- required questions: asked BEFORE booking, naming two of the actual choices -----------
     for ask in o.must_ask:
-        want = {"provider": ("find_providers", "ask"), "place": (None, "ask_place")}.get(ask, ("search_appointment_types", "ask"))
         ok = False
-        for i, e in enumerate(events):
-            r = e.get("result") or {}
-            ambiguous_arg = ask in ("provider", "place") and r.get("status") == "ask" and r.get("ambiguous_arg")
-            if e["type"] == "tool_finished" and (ambiguous_arg or (
-                    (want[0] is None or e["tool"] == want[0]) and r.get("status") == want[1])):
-                nxt = agent_after(i)
-                if nxt and "?" in nxt[0]["text"]:
+        for i, e in enumerate(before_booking):
+            r = e.get("result") or {} if e["type"] == "tool_finished" else {}
+            if not r or r.get("status") not in ("ask", "ask_place"):
+                continue
+            kind_ok = (r.get("status") == "ask_place") if ask == "place" else (
+                (e["tool"] == "find_providers" or r.get("ambiguous_arg") == "provider_id") if ask == "provider"
+                else e["tool"] == "search_appointment_types")
+            if not kind_ok:
+                continue
+            labels = _ask_labels_from(r)
+            for later in before_booking[i + 1:]:
+                if later["type"] == "agent" and "?" in later["text"] and _labels_named(later["text"], labels) >= 2:
                     ok = True
                     break
+            if ok:
+                break
         if not ok:
-            # same standard for every system: a question to the caller that names at least two
-            # of the things being disambiguated (two first names, two visit types, two areas)
+            # same standard for systems without lookup tools: a question naming two of the choices
             labels = o.ask_labels.get(ask, [])
-            for e in events:
-                if e["type"] == "agent" and "?" in e["text"]:
-                    low = e["text"].lower()
-                    if sum(1 for lab in labels if lab and re.search(rf"\b{re.escape(lab)}\b", low)) >= 2:
-                        ok = True
-                        break
-                    says = o.ask_labels.get("provider_says")
-                    if ask == "provider" and says and says in low and re.search(
-                            r"\b(which|two|three|several|multiple|more than one|a few|both)\b", low):
-                        ok = True
-                        break
+            says = o.ask_labels.get("provider_says")
+            for e in before_booking:
+                if e["type"] != "agent" or "?" not in e["text"]:
+                    continue
+                if _labels_named(e["text"], labels) >= 2:
+                    ok = True
+                elif ask == "provider" and says and says in e["text"].lower() and PLURAL_RE.search(e["text"].lower()):
+                    ok = True
+                if ok:
+                    break
         if not ok:
             failures.append(f"did not ask: {ask}")
 
-    # ---- required statements -----------------------------------------------------------------
-    agent_text = " ".join(e["text"] for e in events if e["type"] == "agent")
+    # ---- required statements (questions don't count as statements) -----------------------------
+    agent_all = " ".join(e["text"] for e in events if e["type"] == "agent")
+    stated_text = _declarative(agent_all)
     for st in o.must_state:
-        if not re.search(STATE_PATTERNS.get(st, st), agent_text, re.I):
+        if not re.search(STATE_PATTERNS.get(st, st), stated_text, re.I):
             failures.append(f"did not state: {st}")
 
-    # ---- information answers ------------------------------------------------------------------
-    low = agent_text.lower()
+    # ---- information answers, read from the sentences about the thing asked -------------------
     for item in o.info:
         if item["kind"] == "open_on":
-            ok = re.search(CLOSED, low) if not item["open_locations"] else any(
-                n.lower() in low for n in item["open_locations"])
+            sents = _sentences(agent_all, item["day"].lower())
+            text = " ".join(sents).lower()
+            ok = bool(re.search(CLOSED, text)) if not item["open_locations"] else any(
+                n.lower() in text for n in item["open_locations"])
             if not ok:
                 failures.append(f"wrong or missing answer: open on {item['day']}")
         elif item["kind"] == "location_open_on":
-            squashed = low.replace(" ", "").replace(".", "")
-            ok = any(t in squashed for t in item["opens"]) if item["open"] else re.search(CLOSED, low)
+            text = " ".join(_sentences(agent_all, item["day"].lower()))
+            ok = bool(set(item["opens"]) & time_tokens(text)) if item["open"] else bool(re.search(CLOSED, text.lower()))
             if not ok:
                 failures.append(f"wrong or missing answer: {item['location']} on {item['day']}")
         elif item["kind"] == "nearest_to":
-            if not any(n.lower() in low for n in item["locations"]):
+            low = normalize(stated_text)
+            ok = False
+            for n in item["locations"]:
+                core = " ".join(w for w in normalize(n).split() if w not in GENERIC) or normalize(n)
+                ok = ok or f" {core} " in f" {low} "
+            if not ok:
                 failures.append(f"did not name the nearest location to {item['place']}")
         elif item["kind"] == "count":
             n = item["count"]
-            words = [str(n)] + ([NUMBER_WORDS[n]] if n < len(NUMBER_WORDS) else [])
-            if not any(re.search(rf"\b{w}\b", low) for w in words):
+            stem = (item["spec"].get("specialty") or "").lower()[:7]
+            text = " ".join(_sentences(agent_all, stem)).lower() if stem else stated_text.lower()
+            if n == 0:
+                ok = re.search(r"\b(no|none|n't have any|don't have|do not have)\b", text)
+            else:
+                words = [str(n)] + ([NUMBER_WORDS[n]] if n < len(NUMBER_WORDS) else [])
+                ok = any(re.search(rf"\b{w}\b", text) for w in words)
+            if not ok:
                 failures.append(f"did not give the count ({n})")
         elif item["kind"] == "any_provider":
             if item["providers"]:
-                if not any(normalize(p).split()[-1] in normalize(low).split() for p in item["providers"]):
+                said = normalize(stated_text).split()
+                if not any(normalize(p).split()[-1] in said for p in item["providers"]):
                     failures.append("did not name a provider matching the question")
-            elif not re.search(r"(no|none|n'?t)", low):
-                failures.append("did not say no provider matches")
+            else:
+                lang = (item["spec"].get("language") or "").lower()
+                text = " ".join(_sentences(agent_all, lang)).lower() if lang else ""
+                if not re.search(r"\b(no|none|not|n't)\b", text):
+                    failures.append("did not say no provider matches")
 
     passed = not violations and not failures and TIERS[tier] >= TIERS["acceptable"]
     return {

@@ -30,9 +30,6 @@
     "provider": {
       "name": "Wei Sato",
       "strict": false
-    },
-    "must_state": [
-      "not_accepting_new"
-    ]
+    }
   }
 }

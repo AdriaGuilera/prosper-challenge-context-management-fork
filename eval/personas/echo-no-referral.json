@@ -23,9 +23,6 @@
       "ideal": [
         "Echocardiogram"
       ]
-    },
-    "must_state": [
-      "referral"
-    ]
+    }
   }
 }

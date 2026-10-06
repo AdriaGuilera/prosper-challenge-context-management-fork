@@ -26,9 +26,6 @@
         "Vaccination / Immunization"
       ]
     },
-    "near": "Pinecrest",
-    "must_state": [
-      "far"
-    ]
+    "near": "Pinecrest"
   }
 }

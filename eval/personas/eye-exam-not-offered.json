@@ -25,9 +25,6 @@
         "Eye Exam",
         "Comprehensive Eye Exam"
       ]
-    },
-    "must_state": [
-      "not_offered"
-    ]
+    }
   }
 }

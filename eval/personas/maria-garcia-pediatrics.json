@@ -37,9 +37,6 @@
       "specialty": "Pediatrics",
       "strict": true,
       "says": "Maria Garcia"
-    },
-    "must_ask": [
-      "provider"
-    ]
+    }
   }
 }
