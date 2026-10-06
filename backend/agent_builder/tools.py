@@ -113,7 +113,7 @@ async def lookup_patient(args: dict, ctx: ToolContext, conn) -> dict:
     if not rows:
         ctx.session["patient"] = {"id": None, "name": name, "dob": dob.isoformat(), "is_new": True, "referrals": []}
         return {
-            "found": False, "patient_status": "new", "today": _today(ctx),
+            "found": False, "patient_status": "new", "age": _age(dob, today), "today": _today(ctx),
             "note": "No record under that name and date of birth, so treat them as a NEW patient. "
                     "If they say they've been here before, check the spelling of their name once.",
         }
@@ -127,9 +127,13 @@ async def lookup_patient(args: dict, ctx: ToolContext, conn) -> dict:
     ctx.session["patient"] = {"id": p["id"], "name": p["full_name"], "dob": dob.isoformat(), "is_new": False,
                               "referrals": [r["appointment_type_id"] for r in refs]}
     return {
-        "found": True, "patient_status": "existing", "name": p["full_name"], "today": _today(ctx),
-        "referrals_on_file": [r["name"] for r in refs],
+        "found": True, "patient_status": "existing", "name": p["full_name"], "age": _age(dob, today),
+        "today": _today(ctx), "referrals_on_file": [r["name"] for r in refs],
     }
+
+
+def _age(dob: date, today: date) -> int:
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
 # ---- appointment types ----------------------------------------------------------
@@ -187,11 +191,28 @@ async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
         return _bounded([], status="no_match",
                         instruction="Nothing matched. Ask the caller to describe the visit differently, "
                                     "or say what kinds of visits are available in a specialty.")
+    patient = ctx.session.get("patient")
+    minor = bool(patient) and _age(date.fromisoformat(patient["dob"]), ctx.now().date()) < 18
+    if minor and not specialty and ranking.status in ("match", "ask", "unsure"):
+        # The patient is a child. Specialty is never an eligibility key, but it is a fair
+        # ranking signal: if the words landed on adult visits, rank inside pediatrics too.
+        top = await _type_rows(conn, ctx, list(ranking.candidates) or [t for t, _, _ in ranking.ranked[:1]])
+        if not any(r["specialty"] == "Pediatrics" for r in top.values()):
+            peds = [r["id"] for r in await conn.fetch(
+                "SELECT id FROM appointment_types WHERE catalog_version = $1 AND specialty = 'Pediatrics' AND id = ANY($2)",
+                ctx.cv, candidates)]
+            child = await rank_types(conn, ctx.cv, query, peds, ctx.use_vectors) if peds else None
+            if child and child.ranked:
+                child_rows = await _type_rows(conn, ctx, [t for t, _, _ in child.ranked[:3]])
+                options = [_type_option(child_rows[t], None, patient) for t, _, _ in child.ranked[:3] if t in child_rows]
+                return {"status": "ask", **_bounded(options, total=len(child.ranked)),
+                        "choose_between": [o["name"] for o in options[:2]],
+                        "instruction": "The patient is a child, so these pediatric visits are the likely fit, not the adult "
+                                       "ones the words also match. Ask a plain question to pick between them."}
     hints = json.loads(ranking.cluster["member_hints"]) if ranking.cluster else {}
     first = list(ranking.candidates) if ranking.status in ("ask", "match") else []
     order = first + [tid for tid, _, _ in ranking.ranked if tid not in first]
     rows = await _type_rows(conn, ctx, order[:MAX_RESULTS])
-    patient = ctx.session.get("patient")
     options = [_type_option(rows[tid], hints.get(tid), patient) for tid in order[:MAX_RESULTS] if tid in rows]
     out = _bounded(options, total=len(ranking.ranked))
     if ranking.status in ("ask", "match") and all(not rows[c]["offered"] for c in ranking.candidates if c in rows):

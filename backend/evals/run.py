@@ -200,9 +200,11 @@ async def main(argv=None) -> None:
         if name not in ingested or ingested[name]["catalog_version"] != bundle.version:
             raise SystemExit(f"Catalog '{name}' is not ingested at its current version: run `make ingest CATALOG={name}`.")
         cv, anchor = ingested[name]["catalog_version"], ingested[name]["calendar_anchor"]
-        personas = [] if args.generated_only else [p for p in load_personas() if fnmatch.fnmatch(p["id"], args.cases)]
+        globs = args.cases.split(",")
+        match = lambda pid: any(fnmatch.fnmatch(pid, g) for g in globs)  # noqa: E731
+        personas = [] if args.generated_only else [p for p in load_personas() if match(p["id"])]
         if not args.no_generated:
-            gen = [p for p in generate_personas(bundle) if fnmatch.fnmatch(p["id"], args.cases)]
+            gen = [p for p in generate_personas(bundle) if match(p["id"])]
             personas += gen[: args.max_generated]
         for persona in personas:
             if args.behaviors == "persona":

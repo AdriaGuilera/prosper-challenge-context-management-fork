@@ -217,8 +217,11 @@ def deterministic(o: Oracle, events: list, bookings: list, bundle: Bundle) -> di
             if not kind_ok:
                 continue
             labels = _ask_labels_from(r)
+            # with two choices, a yes/no question about one of them decides ("Were you told to fast?")
+            n_choices = len(r.get("choose_between") or r.get("areas") or r.get("options") or [])
+            need = 1 if n_choices == 2 else 2
             for later in before_booking[i + 1:]:
-                if later["type"] == "agent" and "?" in later["text"] and _labels_named(later["text"], labels) >= 2:
+                if later["type"] == "agent" and "?" in later["text"] and _labels_named(later["text"], labels) >= need:
                     ok = True
                     break
             if ok:
