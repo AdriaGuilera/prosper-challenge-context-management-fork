@@ -275,6 +275,52 @@ agree on behaviour, not only on plumbing.
 baseline-only `list_slots` is hidden). The UI's tool picker and the call trace render tools by name, so they need no
 change.
 
+## Experiment: give the agent the SQL schema instead of tools (`20261007-072023-sql-experiment`)
+
+Question: instead of six purpose-built tools, what if the agent gets the database schema and writes its own SQL?
+
+**Setup** (`evals/sql_agent.py`, `--systems tools,sql`).
+- The prompt holds the documented schema (13 tables, what the columns mean), the six booking policies, and the
+  calendar conventions the tools normally hide: the slot grid, the 30-minute lead and the 21-day horizon. It carries no
+  catalog rows and none of the helpers (`bookable`, `bookable_for`, the slot query).
+- Tools: `lookup_patient`, `run_sql`, `book_appointment`.
+  - `run_sql` runs one query over per-call temp views that are already filtered to this catalog and call, as role
+    `agent_sql`, which has no rights on the real tables. The transaction is read-only, with a 3 s timeout and 50 rows
+    at most. Writes, `patients`, `public.*` and other calls' bookings are all refused (checked by hand).
+  - `book_appointment` still re-checks policies 1–5 and the slot. Only the "offered by check_availability" check is
+    off, since there is no check_availability.
+- Given catalog, 20 hand personas, N=2, no LLM judge. The tools agent ran in the same run.
+
+| | Pass | Invariant breaks | Tool calls / conv | Prompt tokens / conv | Cost / conv |
+|---|---|---|---|---|---|
+| tools, gpt-4o | **100%** | 0 / 50 | 3.8 | 23k | $0.047 |
+| tools, gpt-4o-mini | **92%** | 0 / 50 | 5.2 | 33k | $0.004 |
+| SQL, gpt-4o | 36% | 8 / 50 | 8.2 | 37k | $0.064 |
+| SQL, gpt-4o-mini | 20% | 11 / 50 | 14.3 | 79k | $0.007 |
+
+**Why it fails.** The model writes plausible SQL that answers a slightly different question.
+- **Lookups that silently return nothing.** 272 of 833 queries came back empty and 93 errored. For example,
+  `appointment_types.name = 'flu shot'` is case-sensitive and returns 0 rows, so the agent told an existing patient the
+  clinic doesn't offer flu shots. The same query also applied the new-patient filter to an existing patient.
+  This is the failure `_validate` exists to prevent in the tools design (an unknown value never becomes an empty set).
+- **Slot arithmetic.** 136 booking attempts were rejected at commit. Every rejected time was checked against the
+  reference slot query, and none was actually free: 65 were outside the provider's working block, 57 overlapped an
+  existing booking, 11 were off the grid and 3 were inside the lead time. Free time is schedules × days × a duration
+  grid minus overlaps with bookings at any site. The model rarely gets that right, even with the rule spelled out.
+  "No booking made" is the most common failure.
+- **Ambiguity is skipped.** The `ambiguity_clusters` table is in the schema, but the agent seldom consults it before
+  picking, so "skin check" and "Dr. Chen" cases fail `must_ask`.
+
+**What held:** no unsafe booking was committed. The commit gate in `book_appointment` refused every policy break, so
+the cost of raw SQL is accuracy, turns and money, not data integrity. Without that gate, the 7 "provider can't do X
+there" and 2 referral rejections would have been bad bookings.
+
+**Conclusion.** Letting the model write queries moves the hard, deterministic parts (eligibility joins, slot
+arithmetic, name matching, ambiguity) back onto the model, which is the thing this design was built to avoid. It costs
+2–3× the tool calls, more tokens, and 56–72 points of pass rate. The schema is not the right interface for the model;
+questions with fixed answers are. Small sample (N=2, one catalog), but the gap is far outside run-to-run noise
+(stage 1 varied by a few points).
+
 ## Limits of this evidence
 
 - **No audio.** STT errors are simulated only by persona wording ("Ngyuen", "Gary") and the fuzzy and phonetic matchers. The full Pipecat pipeline was exercised with text in place of audio (above). The WebRTC and ElevenLabs legs are unchanged by this work and were not re-run with a microphone.
