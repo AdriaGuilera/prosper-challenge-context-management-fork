@@ -85,9 +85,13 @@ async def test_booking_gate(conn):
                                                 "location_id": "loc_001", "start": "2026-10-12T08:00"}, ctx)
         assert r["booked"] is False
         await run_tool("lookup_patient", {"full_name": "Alan Reyes", "date_of_birth": "1980-04-02"}, ctx)
-        # policy 6 / invented time: not offered yet
+        # policy 6: Dr. David Chen works at four sites and none was offered yet
         r = await run_tool("book_appointment", {"appointment_type_id": "appt_021", "provider_id": "prov_000",
                                                 "location_id": "loc_001", "start": "2026-10-12T08:00"}, ctx)
+        assert r["booked"] is False and r["policies"] == ["6"] and "several locations" in r["problems"][0]
+        # invented time with a one-site provider: no policy is broken, but the time was never offered
+        r = await run_tool("book_appointment", {"appointment_type_id": "appt_001", "provider_id": "prov_002",
+                                                "location_id": "loc_000", "start": "2026-10-12T08:00"}, ctx)
         assert r["booked"] is False and "weren't offered" in r["problems"][0]
         avail = await run_tool("check_availability", {"appointment_type_id": "appt_021", "provider_id": "prov_000"}, ctx)
         assert avail["instruction"].startswith("This provider works at several")

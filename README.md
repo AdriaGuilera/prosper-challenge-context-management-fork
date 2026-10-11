@@ -44,7 +44,7 @@ Remember to update the `.env` file accordingly.
 
 | Path | Responsibility |
 | --- | --- |
-| `backend/store/` | The Postgres store ([decision 013](docs/decisions/013-postgres-pgvector-postgis-built.md)): `schema.sql` (normalised tables, the `bookable` relation for policies 1-5), `ingest.py` + `lint.py`, `policies.py` (independent Python reference engine), `calendar.py` + `slots.py` (seeded calendar, SQL slots), `search.py` (alias + full text + pgvector, fused), `geo.py` (gazetteer + KNN). |
+| `backend/store/` | The Postgres store ([decision 013](docs/decisions/013-postgres-pgvector-postgis-built.md)): `schema.sql` (normalised tables; the `bookable` relation, a second implementation of policies 1-5 for the differential test), `ingest.py` + `lint.py`, `policies.py` (one function per booking policy, and the `PolicySet` every tool runs them through), `calendar.py` + `slots.py` (seeded calendar, SQL slots), `search.py` (alias + full text + pgvector, fused), `geo.py` (gazetteer + KNN). |
 | `backend/catalogs/` | Catalog bundles: the payload plus what we derive for it (gazetteer mapping, lexicon, patient registry, calendar seed). `given/` points at the untouched `data/catalog.json`; `gen-*` and `adv-*` are variants and hand-built adversarial catalogs (`python -m evals.catalog_gen`). `gazetteer.json` is the one fictional map. |
 | `backend/evals/` | The text-mode eval: runner over the real node graph, caller simulator, per-catalog oracle, deterministic judge (the gate) and LLM quality judge, scenario generators, naive baseline, report. |
 | `eval/personas/`, `eval/behaviors/` | Hand-written personas (catalog-independent) and reusable behaviour profiles. Runs land in `eval/runs/` (gitignored). |

@@ -116,6 +116,24 @@ now logs a warning. Lesson: a graceful fallback must be loud, or it erases the t
 **Age is a ranking signal.** The patient's age (from `lookup_patient`) steers a minor's search into Pediatrics when
 the caller's words land only on adult types ("checkup" for a 7-year-old). Specialty is still never an eligibility key.
 
+## Revised 2026-10-11: one function per policy
+
+The tools no longer read the `bookable` view. `store/policies.py` has one function per catalog policy
+(`provider_works_at_location` … `location_settled`, with 5 split into 5a/5b), and every tool decision runs through
+a `PolicySet` built from the catalog when the call starts:
+- the commit gate in `book_appointment` (policies 1–6, each refusal tagged with its policy number);
+- the pairs `check_availability` considers, and the type/provider/location filters in the lookups, passed into
+  SQL as id lists;
+- every refusal reason the caller hears.
+
+The candidate set stays bounded and availability is still joined last: the allowed pairs are worked out in memory
+(11 ms for the whole 300-provider catalog, once per call; 0.5 ms per lookup) before any slot query runs.
+
+`bookable` / `bookable_for` stay in schema.sql as the independent second implementation of policies 1–5, and the
+differential test proves the two agree on every triple of every catalog. The eval oracle uses the same functions as the tools, so
+that test is now what stops a shared bug from hiding. `PolicySet(..., only={...})` runs a subset; the SQL experiment
+runs without policy 6.
+
 ## Consequences
 
 - `docker compose` becomes a dependency of the demo: `make db-up ingest`, then `make run`.

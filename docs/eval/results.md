@@ -321,6 +321,20 @@ arithmetic, name matching, ambiguity) back onto the model, which is the thing th
 questions with fixed answers are. Small sample (N=2, one catalog), but the gap is far outside run-to-run noise
 (stage 1 varied by a few points).
 
+## Policies as one function each (`20261011-181219-policyset`)
+
+`store/policies.py` now has one function per policy, and every tool runs a `PolicySet` (decision 013, revised
+2026-10-11). Same eval as the SQL experiment's tools rows (given catalog, 20 personas, N=2):
+
+| | Before | After |
+|---|---|---|
+| gpt-4o | 100%, 3.8 tool calls, $0.047 | 100%, 3.9 tool calls, $0.052 |
+| gpt-4o-mini | 92%, 5.2 tool calls, $0.004 | 96%, 4.8 tool calls, $0.004 |
+
+No regression. The one wrong booking (mini on `spanish-pediatrician-sick-kid`) has failed on mini in about half its
+runs since stage 1. Refusals now name the policy (`"policies": ["6"]`), and the 300-provider catalog's full
+policy pass takes 11 ms.
+
 ## Limits of this evidence
 
 - **No audio.** STT errors are simulated only by persona wording ("Ngyuen", "Gary") and the fuzzy and phonetic matchers. The full Pipecat pipeline was exercised with text in place of audio (above). The WebRTC and ElevenLabs legs are unchanged by this work and were not re-run with a microphone.

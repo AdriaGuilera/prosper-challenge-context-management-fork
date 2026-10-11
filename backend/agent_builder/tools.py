@@ -20,9 +20,10 @@ from datetime import date, datetime, timedelta
 from typing import Awaitable, Callable, Optional
 
 from store import db
-from store.bundle import GAZETTEER_PATH, normalize
+from store.bundle import GAZETTEER_PATH, load_bundle, normalize
 from store.geo import resolve_place
 from store.hours import DAY_NAMES, summarize
+from store.policies import Candidate, Conversation, PatientState, PolicySet
 from store.search import rank_types
 from store.calendar import LEAD
 from store.slots import free_slots, spoken
@@ -42,10 +43,11 @@ class ToolContext:
     scope: str = "live"                                  # bookings land here; 'base' is shared
     clock: Callable[[], datetime] = datetime.now
     use_vectors: bool = True
-    require_offered: bool = True                         # policy 6 as "offered by check_availability"; off for the SQL experiment
+    require_offered: bool = True                         # policy 6 + "only offered times"; off for the SQL experiment
     session: dict = field(default_factory=dict)
     cv: Optional[str] = None
     enums: dict = field(default_factory=dict)
+    policies: Optional[PolicySet] = None                 # every "can this be booked" decision goes through this
 
     async def prepare(self) -> None:
         if self.cv:
@@ -55,6 +57,11 @@ class ToolContext:
             self.cv = await conn.fetchval("SELECT catalog_version FROM catalogs WHERE name = $1", self.catalog)
             if not self.cv:
                 raise RuntimeError(f"Catalog '{self.catalog}' is not ingested. Run `make ingest`.")
+            bundle = load_bundle(self.catalog)
+            if bundle.version != self.cv:
+                raise RuntimeError(f"Catalog '{self.catalog}' changed on disk since ingest. Run `make ingest`.")
+            # policy 6 is about the conversation; the SQL experiment has no offered slots to settle it with
+            self.policies = PolicySet(bundle.catalog, only=None if self.require_offered else {"1", "2", "3", "4", "5a", "5b"})
             self.enums = {
                 "specialty": [r[0] for r in await conn.fetch(
                     "SELECT DISTINCT specialty FROM (SELECT specialty FROM providers WHERE catalog_version = $1 "
@@ -133,6 +140,13 @@ async def lookup_patient(args: dict, ctx: ToolContext, conn) -> dict:
     }
 
 
+def _state(patient: Optional[dict]) -> Optional[PatientState]:
+    """The looked-up patient as the policies see them."""
+    if not patient:
+        return None
+    return PatientState(is_new=patient["is_new"], referral_type_ids=frozenset(patient["referrals"]))
+
+
 def _age(dob: date, today: date) -> int:
     return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
@@ -141,24 +155,18 @@ def _age(dob: date, today: date) -> int:
 
 
 async def _type_rows(conn, ctx: ToolContext, ids: list) -> dict:
-    rows = await conn.fetch(
-        """SELECT t.*, EXISTS (SELECT 1 FROM bookable b WHERE b.catalog_version = t.catalog_version
-                                 AND b.appointment_type_id = t.id) AS offered
-           FROM appointment_types t WHERE t.catalog_version = $1 AND t.id = ANY($2)""", ctx.cv, ids)
-    return {r["id"]: r for r in rows}
+    rows = await conn.fetch("SELECT t.* FROM appointment_types t WHERE t.catalog_version = $1 AND t.id = ANY($2)", ctx.cv, ids)
+    offered = {t for _, _, t in ctx.policies.triples()}
+    return {r["id"]: {**dict(r), "offered": r["id"] in offered} for r in rows}
 
 
-def _patient_block(t, patient: Optional[dict]) -> Optional[str]:
-    if not patient:
-        return None
-    if t["requires_referral"] and t["id"] not in patient["referrals"]:
-        return "needs a referral, and none is on file for this patient"
-    if patient["is_new"] and not t["new_patients_allowed"]:
-        return "not open to new patients"
-    return None
+def _patient_block(ctx: ToolContext, t, patient: Optional[dict]) -> Optional[str]:
+    """The type-level policies (4, 5a) for this patient, as the reason they block it."""
+    v = ctx.policies.violations(Candidate(appointment_type_id=t["id"]), _state(patient)) if patient else []
+    return " ".join(x.reason for x in v) or None
 
 
-def _type_option(t, hint: Optional[str], patient: Optional[dict]) -> dict:
+def _type_option(ctx: ToolContext, t, hint: Optional[str], patient: Optional[dict]) -> dict:
     opt = {
         "appointment_type_id": t["id"], "name": t["name"], "specialty": t["specialty"],
         "duration_min": t["duration_min"], "needs_referral": t["requires_referral"],
@@ -167,7 +175,7 @@ def _type_option(t, hint: Optional[str], patient: Optional[dict]) -> dict:
     }
     if hint:
         opt["pick_if_caller_wants"] = hint
-    block = _patient_block(t, patient)
+    block = _patient_block(ctx, t, patient)
     if block:
         opt["blocked_for_this_patient"] = block
     if not t["offered"]:
@@ -180,13 +188,13 @@ async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
     if not query:
         return {"error": "Pass the caller's own words as query."}
     specialty, provider_id, location_id = args.get("specialty"), args.get("provider_id"), args.get("location_id")
+    # narrowed to a provider or site: only the types the catalog policies (1-3) allow there
+    allowed = sorted({t for _, _, t in ctx.policies.triples(provider_id=provider_id, location_id=location_id)}) \
+        if (provider_id or location_id) else None
     candidates = [r["id"] for r in await conn.fetch(
         """SELECT t.id FROM appointment_types t WHERE t.catalog_version = $1
-             AND ($2::text IS NULL OR t.specialty = $2)
-             AND (($3::text IS NULL AND $4::text IS NULL) OR EXISTS (
-                  SELECT 1 FROM bookable b WHERE b.catalog_version = $1 AND b.appointment_type_id = t.id
-                    AND ($3::text IS NULL OR b.provider_id = $3) AND ($4::text IS NULL OR b.location_id = $4)))""",
-        ctx.cv, specialty, provider_id, location_id)]
+             AND ($2::text IS NULL OR t.specialty = $2) AND ($3::text[] IS NULL OR t.id = ANY($3))""",
+        ctx.cv, specialty, allowed)]
     ranking = await rank_types(conn, ctx.cv, query, candidates, ctx.use_vectors)
     if ranking.status == "none":
         return _bounded([], status="no_match",
@@ -205,7 +213,7 @@ async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
             child = await rank_types(conn, ctx.cv, query, peds, ctx.use_vectors) if peds else None
             if child and child.ranked:
                 child_rows = await _type_rows(conn, ctx, [t for t, _, _ in child.ranked[:3]])
-                options = [_type_option(child_rows[t], None, patient) for t, _, _ in child.ranked[:3] if t in child_rows]
+                options = [_type_option(ctx, child_rows[t], None, patient) for t, _, _ in child.ranked[:3] if t in child_rows]
                 return {"status": "ask", **_bounded(options, total=len(child.ranked)),
                         "choose_between": [o["name"] for o in options[:2]],
                         "instruction": "The patient is a child, so these pediatric visits are the likely fit, not the adult "
@@ -214,7 +222,7 @@ async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
     first = list(ranking.candidates) if ranking.status in ("ask", "match") else []
     order = first + [tid for tid, _, _ in ranking.ranked if tid not in first]
     rows = await _type_rows(conn, ctx, order[:MAX_RESULTS])
-    options = [_type_option(rows[tid], hints.get(tid), patient) for tid in order[:MAX_RESULTS] if tid in rows]
+    options = [_type_option(ctx, rows[tid], hints.get(tid), patient) for tid in order[:MAX_RESULTS] if tid in rows]
     out = _bounded(options, total=len(ranking.ranked))
     if ranking.status in ("ask", "match") and all(not rows[c]["offered"] for c in ranking.candidates if c in rows):
         names = [rows[c]["name"] for c in ranking.candidates if c in rows]
@@ -255,6 +263,8 @@ async def find_providers(args: dict, ctx: ToolContext, conn) -> dict:
     accepting = args.get("accepting_new_patients")
     if not (q or specialty or type_id or location_id or language):
         return {"error": "Give at least one of name, specialty, appointment_type_id, location_id or language."}
+    # providers the catalog policies (1-3) allow for this type (at this site, if given)
+    can_do = sorted({p for p, _, _ in ctx.policies.triples(location_id=location_id, type_id=type_id)}) if type_id else None
     rows = await conn.fetch(
         """SELECT p.id, p.name, p.title, p.specialty, p.accepting_new_patients, p.search_name,
                   CASE WHEN $2 = '' THEN 1.0 ELSE name_score($2, p.search_name) END AS score,
@@ -268,16 +278,14 @@ async def find_providers(args: dict, ctx: ToolContext, conn) -> dict:
            WHERE p.catalog_version = $1
              AND ($2 = '' OR name_score($2, p.search_name) >= 0.6)
              AND ($3::text IS NULL OR p.specialty = $3)
-             AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM bookable b WHERE b.catalog_version = $1
-                    AND b.provider_id = p.id AND b.appointment_type_id = $4
-                    AND ($5::text IS NULL OR b.location_id = $5)))
+             AND ($4::text[] IS NULL OR p.id = ANY($4))
              AND ($5::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog_version = $1
                     AND pl.provider_id = p.id AND pl.location_id = $5))
              AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM provider_languages pg WHERE pg.catalog_version = $1
                     AND pg.provider_id = p.id AND lower(pg.language) = lower($6)))
              AND ($7::bool IS NULL OR p.accepting_new_patients = $7)
            ORDER BY score DESC, p.name, p.id""",
-        ctx.cv, q, specialty, type_id, location_id, language, accepting)
+        ctx.cv, q, specialty, can_do, location_id, language, accepting)
     if q:
         # exact full name, then exact surname/first-name word, then fuzzy (misheard names)
         exact = [r for r in rows if r["search_name"] == q]
@@ -297,9 +305,10 @@ async def find_providers(args: dict, ctx: ToolContext, conn) -> dict:
         if patient:
             # answer-shaped: whether THIS caller can see them, so "not accepting new patients"
             # is never misread as a refusal for an existing patient
-            opt["can_see_this_patient"] = (not patient["is_new"]) or r["accepting_new_patients"]
-            if patient["is_new"] and not r["accepting_new_patients"]:
-                opt["why_not"] = "not accepting new patients, and this caller is new"
+            blocked = ctx.policies.violations(Candidate(provider_id=r["id"]), _state(patient))
+            opt["can_see_this_patient"] = not blocked
+            if blocked:
+                opt["why_not"] = " ".join(v.reason for v in blocked)
         options.append(opt)
     out = _bounded(options, by_specialty=by_specialty)
     if q and len(rows) > 1:
@@ -373,6 +382,8 @@ async def find_locations(args: dict, ctx: ToolContext, conn) -> dict:
         if res.confusable_with:
             place_note = f"Heard '{res.place}', which sounds like {', '.join(res.confusable_with)}. Confirm if unsure."
     weekday = (DAY_NAMES.index(open_on) + 1) if open_on in DAY_NAMES else None
+    # locations where the catalog policies (1-3) let someone do this type
+    hosts = sorted({l for _, l, _ in ctx.policies.triples(type_id=type_id)}) if type_id else None
     rows = await conn.fetch(
         """SELECT l.id, l.name, l.address, l.city, l.phone, l.place,
                   CASE WHEN $2::float8 IS NULL THEN NULL
@@ -387,15 +398,14 @@ async def find_locations(args: dict, ctx: ToolContext, conn) -> dict:
                     AND c.location_id = l.id AND c.capability = $4))
              AND ($5::int IS NULL OR EXISTS (SELECT 1 FROM location_hours h WHERE h.catalog_version = $1
                     AND h.location_id = l.id AND h.weekday = $5))
-             AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM bookable b WHERE b.catalog_version = $1
-                    AND b.location_id = l.id AND b.appointment_type_id = $6))
+             AND ($6::text[] IS NULL OR l.id = ANY($6))
              AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog_version = $1
                     AND pl.location_id = l.id AND pl.provider_id = $7))
              AND ($8 = '' OR greatest(similarity(lower(l.name), $8), word_similarity($8, lower(l.name)),
                     similarity(lower(coalesce(l.place, '')), $8)) >= 0.4)
            ORDER BY CASE WHEN $2::float8 IS NULL THEN 0 ELSE l.geom <-> ST_SetSRID(ST_MakePoint($2, $3), 0) END,
                     score DESC, l.name""",
-        ctx.cv, point[0] if point else None, point[1] if point else None, capability, weekday, type_id,
+        ctx.cv, point[0] if point else None, point[1] if point else None, capability, weekday, hosts,
         provider_id, name)
     hours = await conn.fetch(
         "SELECT location_id, weekday, opens, closes FROM location_hours WHERE catalog_version = $1 AND location_id = ANY($2) ORDER BY opens",
@@ -435,60 +445,20 @@ async def find_locations(args: dict, ctx: ToolContext, conn) -> dict:
 # ---- availability -------------------------------------------------------------------
 
 
-async def _patient_state(ctx: ToolContext) -> tuple:
-    p = ctx.session.get("patient")
-    if not p:
-        return None, False, []
-    return p, p["is_new"], p["referrals"]
-
-
-async def _explain_no_pairs(conn, ctx: ToolContext, t, provider_id, location_id, patient) -> list:
-    """Why nothing is bookable: plain reasons for the caller, from the same facts the relation uses."""
-    reasons = []
-    structural = await conn.fetch(
-        """SELECT provider_id, location_id FROM bookable WHERE catalog_version = $1 AND appointment_type_id = $2
-             AND ($3::text IS NULL OR provider_id = $3) AND ($4::text IS NULL OR location_id = $4)""",
-        ctx.cv, t["id"], provider_id, location_id)
-    if not structural:
-        anywhere = await conn.fetchval(
-            "SELECT count(*) FROM bookable WHERE catalog_version = $1 AND appointment_type_id = $2", ctx.cv, t["id"])
-        if not anywhere:
-            reasons.append(f"Nobody here offers {t['name']}.")
-        elif provider_id:
-            reasons.append(f"That provider can't do {t['name']}" + (" at that location." if location_id else "."))
-        elif location_id:
-            reasons.append(f"{t['name']} isn't available at that location"
-                           + (f" (it needs {t['required_capability']})." if t["required_capability"] else "."))
-        return reasons
-    if patient:
-        if t["requires_referral"] and t["id"] not in patient["referrals"]:
-            reasons.append(f"{t['name']} needs a referral on file, and this patient has none for it.")
-        if patient["is_new"] and not t["new_patients_allowed"]:
-            reasons.append(f"{t['name']} isn't open to new patients.")
-        if patient["is_new"] and t["new_patients_allowed"]:
-            reasons.append("The matching providers aren't accepting new patients.")
-    return reasons or ["No bookable combination."]
-
-
 async def check_availability(args: dict, ctx: ToolContext, conn) -> dict:
     type_id = args.get("appointment_type_id")
     provider_id, location_id, near = args.get("provider_id"), args.get("location_id"), args.get("near")
     t = await conn.fetchrow("SELECT * FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
     if not t:
         return {"error": f"Unknown appointment type '{type_id}'. Look it up with search_appointment_types first."}
-    patient, is_new, referrals = await _patient_state(ctx)
-    pairs = await conn.fetch(
-        """SELECT provider_id, location_id FROM bookable_for($1, $2, $3)
-           WHERE appointment_type_id = $4 AND ($5::text IS NULL OR provider_id = $5)
-             AND ($6::text IS NULL OR location_id = $6)""",
-        ctx.cv, bool(is_new), referrals if patient else [t["id"]], type_id, provider_id, location_id)
+    patient = ctx.session.get("patient")
+    state = _state(patient)   # None before lookup: catalog policies only, and a warning below
+    pairs = sorted((p, l) for p, l, _ in ctx.policies.triples(state, provider_id, location_id, type_id))
     if not pairs:
-        reasons = await _explain_no_pairs(conn, ctx, t, provider_id, location_id, patient)
+        reasons = ctx.policies.explain_none(type_id, provider_id, location_id, state)
         out = {"status": "not_bookable", "reasons": reasons, "total": 0, "shown": 0, "truncated": False, "options": []}
         if provider_id or location_id:
-            alt = await conn.fetchval(
-                "SELECT count(*) FROM bookable_for($1, $2, $3) WHERE appointment_type_id = $4",
-                ctx.cv, bool(is_new), referrals if patient else [t["id"]], type_id)
+            alt = len(ctx.policies.triples(state, type_id=type_id))
             if alt:
                 out["alternatives"] = f"{alt} other provider/location combinations can do {t['name']} for this patient. Offer to look without the preference."
         return out
@@ -506,7 +476,7 @@ async def check_availability(args: dict, ctx: ToolContext, conn) -> dict:
         if problem:
             return {**problem, "total": 0, "shown": 0, "truncated": False, "options": []}
         point = res.point
-    pair_list = [(r["provider_id"], r["location_id"]) for r in pairs]
+    pair_list = pairs
     slots = await free_slots(conn, ctx.cv, pair_list, t["duration_min"], max(now, ctx.now() + LEAD), ctx.scopes,
                              args.get("part_of_day") or "any")
     meta = {r["id"]: r for r in await conn.fetch(
@@ -657,16 +627,15 @@ async def book_appointment(args: dict, ctx: ToolContext, conn) -> dict:
     t = await conn.fetchrow("SELECT * FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
     if not t:
         return {"booked": False, "problems": [f"Unknown appointment type '{type_id}'."]}
-    # policies 1-5: the same relation retrieval used, re-run at commit
-    ok = await conn.fetchval(
-        """SELECT EXISTS (SELECT 1 FROM bookable_for($1, $2, $3)
-                          WHERE provider_id = $4 AND location_id = $5 AND appointment_type_id = $6)""",
-        ctx.cv, patient["is_new"], patient["referrals"], provider_id, location_id, type_id)
-    if not ok:
-        reasons = await _explain_no_pairs(conn, ctx, t, provider_id, location_id, patient)
-        return {"booked": False, "problems": reasons}
-    # policy 6 + no invented times: the exact provider, site and time must have been offered
+    # every policy in the set, 1-6, on the exact booking
     offered = ctx.session.get("offered", set())
+    conv = Conversation({})
+    for p, l, _, _ in offered:
+        conv.offered_locations.setdefault(p, set()).add(l)
+    broken = ctx.policies.violations(Candidate(provider_id, location_id, type_id), _state(patient), conv)
+    if broken:
+        return {"booked": False, "problems": [v.reason for v in broken], "policies": [v.policy for v in broken]}
+    # no invented times: the exact provider, site, type and time must have been offered
     if ctx.require_offered and (provider_id, location_id, type_id, start_key) not in offered:
         same_slot = [o for o in offered if o[0] == provider_id and o[1] == location_id and o[3] == start_key]
         if len(same_slot) == 1:
