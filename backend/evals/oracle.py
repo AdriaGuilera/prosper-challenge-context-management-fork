@@ -63,6 +63,12 @@ def target_summary(t: Optional[dict]) -> Optional[dict]:
             "equally_good": t["equally_good"], "ids": [t["appointment_type_id"], t["provider_id"], t["location_id"]]}
 
 
+def when(dt: datetime) -> str:
+    """'Wednesday October 14 at 11am' / '... at 2:45pm'."""
+    clock = dt.strftime("%-I%p") if dt.minute == 0 else dt.strftime("%-I:%M%p")
+    return f"{dt:%A %B %-d} at {clock.lower()}"
+
+
 # ---- geography (independent of PostGIS) ------------------------------------------
 
 
@@ -160,7 +166,6 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
 
     structural = valid_triples(cat)
     o.candidates = {tr for tr in valid_triples(cat, patient) if tr[2] in o.type_tier}
-    wanted_ideal = {t for t, v in o.type_tier.items() if v in ("ideal", "acceptable")}
 
     # provider preference
     pspec = exp.get("provider")
@@ -221,10 +226,13 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
     o.part_of_day = exp.get("part_of_day")
     if exp.get("on_or_after"):
         o.on_or_after = date.fromisoformat(exp["on_or_after"])
-    if exp.get("time") == "soonest" and constrained:
-        o.soonest = _soonest(bundle, anchor, clock, target, o)
-    if o.outcome == "booking":
-        o.target = _target(bundle, anchor, clock, target, o, exp.get("time") == "soonest")
+    if constrained:
+        options = _first_slots(bundle, anchor, clock, target, o)
+        soonest_matters = exp.get("time") == "soonest"
+        if soonest_matters and options:
+            o.soonest = min(s for _, s, *_ in options)
+        if o.outcome == "booking":
+            o.target = _target(bundle, options, o, soonest_matters)
 
     # registered-cluster asks only apply where the cluster exists among offered types
     for ask in exp.get("must_ask", []):
@@ -282,33 +290,10 @@ def _calendar(bundle: Bundle, anchor: date) -> tuple:
     return _CALENDARS[key]
 
 
-def _soonest(bundle: Bundle, anchor: date, clock: datetime, triples: set, o: Oracle) -> Optional[datetime]:
+def _first_slots(bundle: Bundle, anchor: date, clock: datetime, triples: set, o: Oracle) -> list:
+    """(tier rank, first allowed slot, provider, location, type) for every triple at a suitable
+    location: its earliest free slot after the lead time, the caller's earliest date and part of day."""
     schedules, bookings = _calendar(bundle, anchor)
-    types = bundle.types
-    start = clock + calendar.LEAD
-    if o.on_or_after:
-        start = max(start, datetime.combine(o.on_or_after, time()))
-    best = None
-    for prov, loc, tid in triples:
-        if o.best_locations and loc not in o.best_locations:
-            continue
-        for s in calendar.free_slots(schedules, bookings, prov, loc, types[tid]["duration_min"], start):
-            if o.part_of_day == "morning" and s.hour >= 12:
-                continue
-            if o.part_of_day == "afternoon" and s.hour < 12:
-                continue
-            if best is None or s < best:
-                best = s
-            break
-    return best
-
-
-def _target(bundle: Bundle, anchor: date, clock: datetime, triples: set, o: Oracle, soonest_matters: bool) -> Optional[dict]:
-    """The single booking this caller is aiming for: the best visit tier, then the nearest suitable
-    location, then the earliest slot their time preferences allow, then ids (a stable tie-break).
-    `equally_good` counts the other bookings the grading would score the same."""
-    schedules, bookings = _calendar(bundle, anchor)
-    types, provs, locs = bundle.types, bundle.providers, bundle.locations
     start = clock + calendar.LEAD
     if o.on_or_after:
         start = max(start, datetime.combine(o.on_or_after, time()))
@@ -317,11 +302,18 @@ def _target(bundle: Bundle, anchor: date, clock: datetime, triples: set, o: Orac
     for prov, loc, tid in triples:
         if o.best_locations and loc not in o.best_locations:
             continue
-        for s in calendar.free_slots(schedules, bookings, prov, loc, types[tid]["duration_min"], start):
+        for s in calendar.free_slots(schedules, bookings, prov, loc, bundle.types[tid]["duration_min"], start):
             if (o.part_of_day == "morning" and s.hour >= 12) or (o.part_of_day == "afternoon" and s.hour < 12):
                 continue
             options.append((rank.get(o.type_tier.get(tid), 3), s, prov, loc, tid))
             break
+    return options
+
+
+def _target(bundle: Bundle, options: list, o: Oracle, soonest_matters: bool) -> Optional[dict]:
+    """The single booking this caller is aiming for: the best visit tier, then the nearest suitable
+    location, then the earliest slot their time preferences allow, then ids (a stable tie-break).
+    `equally_good` counts the other bookings the grading would score the same."""
     if not options:
         return None
     best = min(options)
@@ -331,10 +323,9 @@ def _target(bundle: Bundle, anchor: date, clock: datetime, triples: set, o: Orac
         rule += f", in the {o.part_of_day}"
     if o.on_or_after:
         rule += f", not before {o.on_or_after:%A %B %-d}"
-    tier, s, prov, loc, tid = best
-    clock_text = s.strftime("%-I%p") if s.minute == 0 else s.strftime("%-I:%M%p")
-    text = (f"{types[tid]['name']} with {provs[prov]['name']} at {locs[loc]['name']}, "
-            f"{s:%A %B %-d} at {clock_text.lower()}")
+    _, s, prov, loc, tid = best
+    text = (f"{bundle.types[tid]['name']} with {bundle.providers[prov]['name']} at "
+            f"{bundle.locations[loc]['name']}, {when(s)}")
     return {"appointment_type_id": tid, "provider_id": prov, "location_id": loc, "start": s, "text": text,
             "time_rule": rule, "equally_good": len(same) - 1}
 

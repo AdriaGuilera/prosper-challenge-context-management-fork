@@ -41,9 +41,8 @@ class FlowRunner:
         self.node = node_cfg["name"]
         if node_cfg.get("role_message"):
             self.system = node_cfg["role_message"]
+            self.log({"type": "context", "text": self.system})
         self.messages += [dict(m) for m in node_cfg.get("task_messages", [])]
-        if node_cfg.get("role_message") and self.log:
-            self.log({"type": "context", "text": node_cfg["role_message"]})
         self.functions = {f.name: f for f in node_cfg.get("functions", [])}
         self.ending = any(a.get("type") == "end_conversation" for a in node_cfg.get("post_actions", []))
 
@@ -56,7 +55,6 @@ class FlowRunner:
     async def start(self) -> str:
         await self.builder.prepare()
         self.enter(self.builder.build_initial_node())
-        self.log({"type": "context", "text": self.system})
         await self.builder.announce_start()
         return await self.agent_turn()
 
@@ -67,8 +65,9 @@ class FlowRunner:
     async def agent_turn(self) -> str:
         started = time.perf_counter()
         for _ in range(MAX_STEPS_PER_TURN):
+            tools = {"tools": self._tools()} if self.functions else {}
             msg = await llm.chat(self.model, [{"role": "system", "content": self.system}] + self.messages,
-                                 tools=self._tools() or None, extra=model_extra(self.model), meter=self.log)
+                                 meter=self.log, **tools, **model_extra(self.model))
             if msg.tool_calls:
                 self.messages.append({
                     "role": "assistant", "content": msg.content,
@@ -101,6 +100,3 @@ class FlowRunner:
             return text
         self.log({"type": "stuck", "node": self.node})
         return ""
-
-    def context_chars(self) -> int:
-        return len(self.system) + sum(len(json.dumps(m, default=str)) for m in self.messages)

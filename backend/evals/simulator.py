@@ -15,15 +15,14 @@ ACTS = {"inform", "answer", "confirm", "decline", "ask", "goodbye"}
 
 
 class CallerSimulator:
-    def __init__(self, view: dict, log, model: str = SIM_MODEL):
+    def __init__(self, view: dict, log):
         self.system = simulator_prompt(view)
         self.history: list = []
         self.log = log
-        self.model = model
 
     async def reply(self, agent_text: str) -> dict:
         self.history.append({"role": "user", "content": agent_text or "(silence)"})
-        msg = await llm.chat(self.model, [{"role": "system", "content": self.system}] + self.history,
+        msg = await llm.chat(SIM_MODEL, [{"role": "system", "content": self.system}] + self.history,
                              meter=self.log, role="simulator", temperature=SIM_TEMPERATURE,
                              response_format={"type": "json_object"})
         try:

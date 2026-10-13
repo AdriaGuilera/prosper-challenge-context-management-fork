@@ -13,14 +13,13 @@
 #
 
 import json
-from datetime import datetime
 from typing import Optional
 
 from store.bundle import Bundle
 from store.policies import triple_problems
 
 from . import llm
-from .oracle import TIERS, Oracle
+from .oracle import TIERS, Oracle, when
 
 JUDGE_MODEL = "gpt-5.6-terra"   # chosen on agreement with hand-checked verdicts
 MAX_RESULT_CHARS = 1500
@@ -99,12 +98,6 @@ Reply ONLY with JSON:
 # ---- the answer key, in names ------------------------------------------------------------
 
 
-def _when(dt: datetime) -> str:
-    """'Wednesday October 14 at 11am' / '... at 2:45pm'."""
-    clock = dt.strftime("%-I%p") if dt.minute == 0 else dt.strftime("%-I:%M%p")
-    return f"{dt:%A %B %-d} at {clock.lower()}"
-
-
 def answer_key(o: Oracle, bundle: Bundle, persona: dict) -> str:
     T, P, L = bundle.types, bundle.providers, bundle.locations
     c = persona.get("caller", {})
@@ -149,7 +142,7 @@ def answer_key(o: Oracle, bundle: Bundle, persona: dict) -> str:
     if o.best_locations:
         lines.append(f"Nearest suitable location(s): {', '.join(sorted(L[l]['name'] for l in o.best_locations))}.")
     if o.soonest:
-        lines.append(f"Soonest suitable slot: {_when(o.soonest)}.")
+        lines.append(f"Soonest suitable slot: {when(o.soonest)}.")
     if o.on_or_after:
         lines.append(f"The caller can't come before {o.on_or_after:%A %B %-d}.")
     if o.part_of_day:
@@ -203,10 +196,8 @@ def bookings_text(bookings: list, o: Oracle, bundle: Bundle) -> str:
                                    patient=o.patient)
         out.append(f"{b['confirmation']}: {T.get(b['appointment_type_id'], {}).get('name', b['appointment_type_id'])} with "
                    f"{P.get(b['provider_id'], {}).get('name', b['provider_id'])} at "
-                   f"{L.get(b['location_id'], {}).get('name', b['location_id'])}, {_when(b['starts_at'])}; "
-                   + (f"patient_id {b['patient_id']}" if b.get("patient_id")
-                      else "patient record not logged in this run (do not judge the record)")
-                   + f"; policy check: {'valid' if not problems else 'INVALID ' + ', '.join(problems)}")
+                   f"{L.get(b['location_id'], {}).get('name', b['location_id'])}, {when(b['starts_at'])}; "
+                   f"patient_id {b['patient_id']}; policy check: {'valid' if not problems else 'INVALID ' + ', '.join(problems)}")
     return "\n".join(out)
 
 
@@ -244,6 +235,5 @@ async def judge(o: Oracle, events: list, bookings: list, bundle: Bundle, persona
         "pass": not violations and not failures and TIERS[tier] >= TIERS["acceptable"],
         "tier": tier, "score": TIERS[tier] if not violations else 0.0,
         "tier_reasons": tier_reasons, "violations": violations, "failures": failures, "quality": quality,
-        "judge_model": model,
         "booking": {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in final.items()} if final else None,
     }

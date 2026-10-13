@@ -15,7 +15,7 @@ from collections import defaultdict
 
 from store.bundle import Bundle, normalize
 from store.hours import DAY_NAMES, HoursError, parse_hours
-from store.policies import PatientState, valid_triples
+from store.policies import valid_triples
 
 from .oracle import location_points
 
@@ -35,7 +35,6 @@ class _Gen:
         self.providers = bundle.providers
         self.locations = bundle.locations
         self.structural = valid_triples(self.cat)
-        self.existing_all_refs = PatientState(False, frozenset(self.types))
         self.points = location_points(bundle)
         self.n = 0
         self.out = []
@@ -136,7 +135,7 @@ class _Gen:
                 bad = [l for l in p["location_ids"] if l not in ok]
                 if ok and bad:
                     found.append((p["id"], tid, ok, bad))
-        for pid, tid, ok, bad in self.rng.sample(found, min(k, len(found))):
+        for pid, tid, _, bad in self.rng.sample(found, min(k, len(found))):
             p, t = self.providers[pid], self.types[tid]
             refs = [t["name"]] if t["requires_referral"] else []
             c = self.caller(True, refs)

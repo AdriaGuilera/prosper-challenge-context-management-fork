@@ -24,12 +24,13 @@ BEHAVIOR_DIR = EVAL_DIR / "behaviors"
 CALLER_VISIBLE = ("name", "dob", "goal", "opening", "preferences", "answers", "knows")
 
 
-def load_personas(pattern: str = "*") -> list:
-    return [json.loads(p.read_text()) for p in sorted(PERSONA_DIR.glob(f"{pattern}.json"))]
+def load_personas() -> list:
+    return [json.loads(p.read_text()) for p in sorted(PERSONA_DIR.glob("*.json"))]
 
 
 def load_behaviors() -> dict:
-    return {json.loads(p.read_text())["name"]: json.loads(p.read_text()) for p in sorted(BEHAVIOR_DIR.glob("*.json"))}
+    behaviors = [json.loads(p.read_text()) for p in sorted(BEHAVIOR_DIR.glob("*.json"))]
+    return {b["name"]: b for b in behaviors}
 
 
 def load_for_simulator(persona: dict, behavior: dict) -> dict:

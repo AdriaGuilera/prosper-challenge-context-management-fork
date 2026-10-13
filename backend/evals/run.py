@@ -3,7 +3,7 @@
 # with cost, into eval/runs/<run_id>/ (gitignored) plus a markdown summary.
 #
 #   python -m evals.run --catalog given --models gpt-4o-mini --n 3
-#   python -m evals.run --catalog all --models gpt-4o,gpt-4o-mini,gpt-5.6-luna,gpt-5.6-terra --n 5 --baseline
+#   python -m evals.run --catalog all --models gpt-4o,gpt-4o-mini,gpt-5.6-luna,gpt-5.6-terra --n 5 --systems tools,baseline
 #
 # Each conversation gets its own calendar scope, so concurrent runs never see each
 # other's bookings, and its own copy of the persona's patient record.
@@ -14,6 +14,7 @@ import asyncio
 import fnmatch
 import json
 import random
+import sys
 import time
 import uuid
 from datetime import date, datetime, time as dtime, timedelta
@@ -32,6 +33,7 @@ from store.bundle import list_bundles, load_bundle, normalize  # noqa: E402
 from . import judge as judges  # noqa: E402
 from .baseline import baseline_config  # noqa: E402
 from .generators import generate_personas  # noqa: E402
+from .llm import cost_usd  # noqa: E402
 from .oracle import compute_oracle, seeded_patient_id  # noqa: E402
 from .personas import EVAL_DIR, load_behaviors, load_for_simulator, load_personas  # noqa: E402
 from .report import write_summary  # noqa: E402
@@ -59,9 +61,14 @@ async def seed_patient(conn, cv: str, scope: str, persona: dict, bundle) -> None
                                cv, scope, pid, tid, expires)
 
 
-async def cleanup(conn, cv: str, scope: str) -> None:
+async def collect_bookings(conn, cv: str, scope: str) -> list:
+    """The bookings a conversation wrote, then wipe its scope."""
+    rows = await conn.fetch(
+        """SELECT confirmation, patient_id, provider_id, location_id, appointment_type_id, starts_at FROM appointments
+           WHERE catalog_version = $1 AND scope = $2 AND status = 'booked' ORDER BY id""", cv, scope)
     for table in ("appointments", "referrals", "patients"):
         await conn.execute(f"DELETE FROM {table} WHERE catalog_version = $1 AND scope = $2", cv, scope)
+    return [dict(r) for r in rows]
 
 
 async def converse(job: dict, max_turns: int) -> dict:
@@ -109,20 +116,14 @@ async def converse(job: dict, max_turns: int) -> dict:
         log({"type": "error", "text": error})
 
     async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """SELECT confirmation, patient_id, provider_id, location_id, appointment_type_id, starts_at FROM appointments
-               WHERE catalog_version = $1 AND scope = $2 AND status = 'booked' ORDER BY id""", job["cv"], job["scope"])
-        bookings = [dict(r) for r in rows]
-        await cleanup(conn, job["cv"], job["scope"])
+        bookings = await collect_bookings(conn, job["cv"], job["scope"])
 
     oracle = compute_oracle(persona, bundle, job["anchor"], job["clock"])
     verdict = await judges.judge(oracle, events, bookings, bundle, persona, model=job["judge_model"], meter=log, error=error)
-    return {"events": events, "verdict": verdict, "quality": verdict["quality"], "oracle": oracle.summary(), "bookings": bookings,
-            "context_chars": runner.context_chars(), "ended": runner.ended, "error": error}
+    return {"events": events, "verdict": verdict, "oracle": oracle.summary(), "bookings": bookings, "error": error}
 
 
 def metrics(events: list, model: str) -> dict:
-    from .llm import cost_usd
     agent = [e for e in events if e["type"] == "llm_call" and e["role"] == "agent"]
     turns = [e["ms"] for e in events if e["type"] == "agent_turn_ms"]
     tools = [e for e in events if e["type"] == "tool_finished"]
@@ -143,15 +144,14 @@ async def run_job(job: dict, sem, out_dir: Path, max_turns: int, results: list, 
     async with sem:
         started = time.perf_counter()
         res = await converse(job, max_turns)
+        v = res["verdict"]
         row = {
             "job": job["id"], "catalog": job["bundle"].name, "persona": job["persona"]["id"],
             "source": job["persona"].get("source", "hand"), "tags": job["persona"].get("tags", []),
             "behavior": job["behavior"]["name"], "model": job["model"],
             "system": job["system"] + ("" if job.get("use_vectors", True) else "-novec"), "rep": job["rep"],
-            "pass": res["verdict"]["pass"], "tier": res["verdict"]["tier"], "score": res["verdict"]["score"],
-            "violations": res["verdict"]["violations"], "failures": res["verdict"]["failures"],
-            "tier_reasons": res["verdict"]["tier_reasons"], "booking": res["verdict"]["booking"],
-            "quality": res["quality"], "oracle": res["oracle"], "error": res["error"],
+            **{k: v[k] for k in ("pass", "tier", "score", "violations", "failures", "tier_reasons", "booking", "quality")},
+            "oracle": res["oracle"], "error": res["error"],
             "wall_s": round(time.perf_counter() - started, 1), **metrics(res["events"], job["model"]),
         }
         (out_dir / "transcripts" / f"{job['id']}.json").write_text(json.dumps(
@@ -170,12 +170,8 @@ async def main(argv=None) -> None:
     ap.add_argument("--n", type=int, default=3, help="repeats per case")
     ap.add_argument("--cases", default="*", help="glob over persona ids")
     ap.add_argument("--behaviors", default="persona", help="persona (each persona's own) | all | name,name")
-    ap.add_argument("--no-generated", action="store_true", help="hand-written personas only")
-    ap.add_argument("--generated-only", action="store_true")
-    ap.add_argument("--max-generated", type=int, default=12, help="generated personas per catalog")
-    ap.add_argument("--baseline", action="store_true", help="also run the naive full-catalog-in-prompt agent")
-    ap.add_argument("--baseline-only", action="store_true")
-    ap.add_argument("--systems", default="", help="explicit list, e.g. tools,baseline")
+    ap.add_argument("--max-generated", type=int, default=12, help="generated personas per catalog (0 = hand-written only)")
+    ap.add_argument("--systems", default="tools", help="tools | baseline (the naive full-catalog-in-prompt agent) | tools,baseline")
     ap.add_argument("--judge-model", default=judges.JUDGE_MODEL, help="the LLM that judges every conversation")
     ap.add_argument("--concurrency", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=16)
@@ -186,9 +182,8 @@ async def main(argv=None) -> None:
     names = list_bundles() if args.catalog == "all" else args.catalog.split(",")
     models = args.models.split(",")
     behaviors = load_behaviors()
-    systems = (["baseline"] if args.baseline_only else ["tools"] + (["baseline"] if args.baseline else []))
-    if args.systems:
-        systems = args.systems.split(",")
+    systems = args.systems.split(",")
+    globs = args.cases.split(",")
 
     pool = await db.pool()
     async with pool.acquire() as conn:
@@ -204,12 +199,8 @@ async def main(argv=None) -> None:
         if name not in ingested or ingested[name]["catalog_version"] != bundle.version:
             raise SystemExit(f"Catalog '{name}' is not ingested at its current version: run `make ingest CATALOG={name}`.")
         cv, anchor = ingested[name]["catalog_version"], ingested[name]["calendar_anchor"]
-        globs = args.cases.split(",")
-        match = lambda pid: any(fnmatch.fnmatch(pid, g) for g in globs)  # noqa: E731
-        personas = [] if args.generated_only else [p for p in load_personas() if match(p["id"])]
-        if not args.no_generated:
-            gen = [p for p in generate_personas(bundle) if match(p["id"])]
-            personas += gen[: args.max_generated]
+        match = lambda p: any(fnmatch.fnmatch(p["id"], g) for g in globs)  # noqa: E731
+        personas = list(filter(match, load_personas())) + list(filter(match, generate_personas(bundle)))[: args.max_generated]
         for persona in personas:
             if args.behaviors == "persona":
                 bnames = persona.get("behaviors") or ["cooperative"]
@@ -254,5 +245,4 @@ async def main(argv=None) -> None:
 
 
 if __name__ == "__main__":
-    import sys
     asyncio.run(main(sys.argv[1:]))

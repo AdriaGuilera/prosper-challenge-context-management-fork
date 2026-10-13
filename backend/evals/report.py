@@ -2,7 +2,9 @@
 # Markdown summary of a run: accuracy and cost side by side, always.
 #
 
+import json
 import statistics
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -63,7 +65,7 @@ def write_summary(out_dir: Path, rows: list, meta: dict) -> Path:
              f"- conversations: {len(rows)}; catalogs: {', '.join(meta['catalogs'])}; models: {', '.join(meta['models'])}; "
              f"systems: {', '.join(meta['systems'])}",
              f"- args: `{meta['args']}`",
-             f"- judge = LLM ({meta.get('judge_model') or 'gpt-4o'}) against the oracle's answer key: pass = no invariant "
+             f"- judge = LLM ({meta['judge_model']}) against the oracle's answer key: pass = no invariant "
              "broken, outcome tier >= acceptable, required questions asked, required facts stated. quality = the same "
              "judge's 1-5 mean, never part of pass.",
              "- tool time is inside turn latency; simulator and judge tokens are excluded from cost.", ""]
@@ -115,7 +117,6 @@ def write_summary(out_dir: Path, rows: list, meta: dict) -> Path:
 
 def main(argv) -> None:
     """Rebuild summary.md from a run's results.jsonl (e.g. after an interrupted run)."""
-    import json
     run = Path(argv[0])
     rows = [json.loads(line) for line in (run / "results.jsonl").read_text().splitlines() if line.strip()]
     meta = json.loads((run / "meta.json").read_text())
@@ -123,5 +124,4 @@ def main(argv) -> None:
 
 
 if __name__ == "__main__":
-    import sys
     main(sys.argv[1:])

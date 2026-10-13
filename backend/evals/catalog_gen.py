@@ -21,6 +21,7 @@
 
 import json
 import random
+import re
 from pathlib import Path
 
 from store.bundle import CATALOGS_DIR, GAZETTEER_PATH
@@ -201,7 +202,6 @@ def derived_aliases(catalog: dict) -> dict:
     """Catalog-specific aliases read off the catalog's own type names: the parts of
     'EKG / Electrocardiogram' and 'Bone Density Scan (DEXA)', and names with their
     punctuation spoken ('X-Ray' -> 'x ray'). Mechanical, so every bundle gets its own."""
-    import re
     out: dict = {}
     for t in catalog["appointment_types"]:
         name = t["name"]

@@ -34,7 +34,7 @@ def show(path: Path) -> None:
 
 def main(argv):
     runs = EVAL_DIR / "runs"
-    run = sorted(runs.iterdir())[-1] if not argv or argv[0] == "latest" else Path(argv[0])
+    run = max(runs.iterdir(), key=lambda d: d.stat().st_mtime) if not argv or argv[0] == "latest" else Path(argv[0])
     if not run.is_absolute() and not run.exists():
         run = runs / argv[0]
     pattern = argv[1] if len(argv) > 1 else ""
