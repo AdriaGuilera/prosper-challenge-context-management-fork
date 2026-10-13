@@ -123,8 +123,15 @@ def answer_key(o: Oracle, bundle: Bundle, persona: dict) -> str:
         lines.append("Visit types by tier: " + "; ".join(f"{k}: {', '.join(sorted(v))}" for k, v in by.items()) + ".")
     if o.provider_match:
         names = sorted(P[p]["name"] for p in o.provider_match if p in P)
-        lines.append(f"Provider the caller asked for: {' or '.join(names)} "
-                     f"({'they insisted on this provider' if o.provider_strict else 'a preference, not a requirement'}).")
+        spec = persona.get("expect", {}).get("provider") or {}
+        kind = "a requirement" if o.provider_strict else "a preference, not a requirement"
+        if spec.get("name"):
+            lines.append(f"Provider the caller asked for by name: {' or '.join(names)} ({kind}).")
+        else:
+            what = ", ".join(f"speaks {v}" if k == "language" else str(v)
+                             for k, v in spec.items() if k in ("specialty", "language"))
+            lines.append(f"The caller didn't name a provider but needs one who is: {what} ({kind}). "
+                         f"In this catalog that is: {' or '.join(names)}.")
     if o.target:
         t = o.target
         lines.append(f"TARGET BOOKING (what this caller is aiming for): {t['text']}. Time: {t['time_rule']}"
