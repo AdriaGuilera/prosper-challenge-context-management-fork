@@ -355,7 +355,7 @@ The judge also gets the whole call in order (caller and assistant lines, every t
 bookings actually written to the database, with the policy check of each. `pass` is still the same fixed combination
 (no violation, no failure, tier at least acceptable).
 
-**Which model judges.** `evals/judge_agreement.py` re-judged a stratified sample of saved transcripts: 150
+**Which model judges.** A one-off script (`evals/judge_agreement.py`, since deleted; in git at `4c539aa`) re-judged a stratified sample of saved transcripts: 150
 conversations, 50 per system (tools, baseline, SQL), half of them old failures. It compares against the verdicts saved
 by the rule-based judge.
 
@@ -399,8 +399,9 @@ removed along with the rest of `backend/tests` in `b508754`.)
   `make smoke-pipeline`'s exit code is probabilistic.
 - Each conversation costs one judge call more than before, because quality used to be a separate, optional call
   (`--no-llm-judge` is gone).
-- The pass rates above were produced by the rule-based judge. `python -m evals.rejudge <run_dir>` re-judges any saved
-  run without replaying it (about $0.009 per conversation; all ~1,500 saved conversations ≈ $14).
+- The pass rates above were produced by the rule-based judge and have not been re-judged. The re-judge script was
+  removed in a later cleanup (`git show 4a4011f:backend/evals/rejudge.py` restores it). Re-judging costs about
+  $0.009 per conversation, so all ~1,500 saved conversations would cost about $14.
 
 ## Limits of this evidence
 
