@@ -189,11 +189,24 @@ async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
     # narrowed to a provider or site: only the types the catalog policies (1-3) allow there
     allowed = sorted({t for _, _, t in ctx.policies.triples(provider_id=provider_id, location_id=location_id)}) \
         if (provider_id or location_id) else None
-    candidates = [r["id"] for r in await conn.fetch(
-        """SELECT t.id FROM appointment_types t WHERE t.catalog_version = $1
-             AND ($2::text IS NULL OR t.specialty = $2) AND ($3::text[] IS NULL OR t.id = ANY($3))""",
-        ctx.cv, specialty, allowed)]
+    async def _candidates(spec):
+        return [r["id"] for r in await conn.fetch(
+            """SELECT t.id FROM appointment_types t WHERE t.catalog_version = $1
+                 AND ($2::text IS NULL OR t.specialty = $2) AND ($3::text[] IS NULL OR t.id = ANY($3))""",
+            ctx.cv, spec, allowed)]
+
+    candidates = await _candidates(specialty)
     ranking = await rank_types(conn, ctx.cv, query, candidates, ctx.use_vectors)
+    specialty_note = None
+    if specialty and (provider_id or location_id) and ranking.status not in ("match", "ask"):
+        # Narrowed to a particular provider or site, a specialty label is redundant and often wrong
+        # (a visit's label needn't match its provider's): if it kept the words from matching, drop it.
+        wider = await _candidates(None)
+        retry = await rank_types(conn, ctx.cv, query, wider, ctx.use_vectors)
+        if retry.status in ("match", "ask"):
+            candidates, ranking, specialty = wider, retry, None
+            specialty_note = (f"Matched without the specialty filter: visit types are labelled loosely, so "
+                              f"'{args.get('specialty')}' is not a reliable filter. Use the visit's own name.")
     if ranking.status == "none":
         return _bounded([], status="no_match",
                         instruction="Nothing matched. Ask the caller to describe the visit differently, "
@@ -244,6 +257,8 @@ async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
         out = {"status": "unsure", **out,
                "instruction": "Low confidence. Ask the caller what the visit is for in other words, "
                               "or offer the closest one or two options as a question."}
+    if specialty_note:
+        out["note"] = specialty_note
     return out
 
 
@@ -263,7 +278,7 @@ async def find_providers(args: dict, ctx: ToolContext, conn) -> dict:
         return {"error": "Give at least one of name, specialty, appointment_type_id, location_id or language."}
     # providers the catalog policies (1-3) allow for this type (at this site, if given)
     can_do = sorted({p for p, _, _ in ctx.policies.triples(location_id=location_id, type_id=type_id)}) if type_id else None
-    rows = await conn.fetch(
+    sql = (
         """SELECT p.id, p.name, p.title, p.specialty, p.accepting_new_patients, p.search_name,
                   CASE WHEN $2 = '' THEN 1.0 ELSE name_score($2, p.search_name) END AS score,
                   (SELECT json_agg(json_build_object('location_id', l.id, 'name', l.name) ORDER BY l.name)
@@ -282,8 +297,18 @@ async def find_providers(args: dict, ctx: ToolContext, conn) -> dict:
              AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM provider_languages pg WHERE pg.catalog_version = $1
                     AND pg.provider_id = p.id AND lower(pg.language) = lower($6)))
              AND ($7::bool IS NULL OR p.accepting_new_patients = $7)
-           ORDER BY score DESC, p.name, p.id""",
-        ctx.cv, q, specialty, can_do, location_id, language, accepting)
+           ORDER BY score DESC, p.name, p.id""")
+    rows = await conn.fetch(sql, ctx.cv, q, specialty, can_do, location_id, language, accepting)
+    specialty_note = None
+    if not rows and specialty and q:
+        # A name is more specific than a label: if the specialty alone hides the person the caller
+        # named (visit and provider labels often differ), answer for the name and say so. Without a
+        # name, a specialty is what the caller asked for ("a pediatrician") and stays a filter.
+        rows = await conn.fetch(sql, ctx.cv, q, None, can_do, location_id, language, accepting)
+        if rows:
+            specialty_note = (f"No provider is labelled '{specialty}' for this, so that filter was dropped; these "
+                              "match everything else you asked. Specialty labels on visits and providers often differ.")
+            specialty = None
     if q:
         # exact full name, then exact surname/first-name word, then fuzzy (misheard names)
         exact = [r for r in rows if r["search_name"] == q]
@@ -332,9 +357,20 @@ async def find_providers(args: dict, ctx: ToolContext, conn) -> dict:
             out = {"status": "exists_but_filtered", **out, "named_providers": who,
                    "instruction": f"That provider exists ({who}) but doesn't match what you filtered on. "
                                   "Tell the caller exactly why they can't book with them, then offer alternatives."}
-        else:
+        elif q:
             out = {"status": "no_match", **out,
                    "instruction": "No provider by that name. Say so; don't guess. Offer to search by specialty."}
+        else:
+            asked = ", ".join(f"{k}={v}" for k, v in (("appointment_type_id", type_id), ("location_id", location_id),
+                                                       ("language", language), ("specialty", specialty),
+                                                       ("accepting_new_patients", accepting)) if v is not None)
+            out = {"status": "no_match", **out,
+                   "instruction": f"No provider matches all of: {asked}. If that combination is what the caller asked "
+                                  "for, tell them plainly that we don't have it before offering anything else. If a "
+                                  "filter was your own guess rather than the caller's words, search again without it "
+                                  "(for a visit, check_availability without a location shows where it can be booked)."}
+    if specialty_note:
+        out["note"] = specialty_note
     return out
 
 
@@ -428,7 +464,9 @@ async def find_locations(args: dict, ctx: ToolContext, conn) -> dict:
     if point is not None and options:
         d0 = options[0]["distance_km"]
         if d0 > FAR_KM:
-            out["note"] = f"Nothing near {near}: the closest location is {options[0]['name']}, about {d0:.0f} km away."
+            out["note"] = (f"Nothing near {near}: the closest location is {options[0]['name']}, about {d0:.0f} km away"
+                           + ("." if type_id else ". For a particular visit, pass appointment_type_id: not every "
+                                                  "location offers every visit."))
         elif len(options) > 1 and abs(options[1]["distance_km"] - d0) < 0.05:
             out["note"] = f"{options[0]['name']} and {options[1]['name']} are equally close to {near}. Offer both."
     if place_note:
@@ -518,7 +556,8 @@ async def check_availability(args: dict, ctx: ToolContext, conn) -> dict:
     if not patient:
         out["warning"] = "Patient not looked up yet: referral and new-patient rules were not applied. Look them up before booking."
     if point is not None and options and options[0].get("distance_km", 0) > FAR_KM:
-        out["note"] = f"Nothing near {near}; these are the closest."
+        out["instruction"] = (f"Nothing is near {near}. Tell the caller that plainly, and that the closest is "
+                              f"{options[0]['location']} (about {options[0]['distance_km']:.0f} km), before offering times.")
     return out
 
 
@@ -675,12 +714,14 @@ TOOLS = {
         ),
         Tool(
             "find_locations",
-            "Clinic locations with address, phone, opening hours and services. Filter by name, a capability, a day "
-            "they're open, what they can do, or rank by distance from a place the caller names "
-            "(a neighbourhood, street or landmark).",
+            "Clinic locations with address, phone, opening hours and services. Filter by name, a day they're open, "
+            "or rank by distance from a place the caller names (a neighbourhood, street or landmark). To find where "
+            "a particular visit can be done, pass its appointment_type_id (look it up first): not every location "
+            "offers every visit.",
             {"name": {"type": "string"},
              "near": {"type": "string", "description": "Place the caller named, e.g. 'Sunset' or 'Geary Blvd'."},
-             "capability": {"type": "string"},
+             "capability": {"type": "string", "description": "Equipment the location has. Only when the caller asks "
+                                                              "about equipment itself; never as a stand-in for a visit."},
              "open_on": {"type": "string", "enum": DAY_NAMES},
              "appointment_type_id": {**_ID, "description": "Only locations where this type is bookable."},
              "provider_id": {**_ID, "description": "Only locations where this provider works."}},
