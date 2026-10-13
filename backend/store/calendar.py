@@ -32,7 +32,7 @@ def _time(minutes: int) -> time:
 
 
 def location_week(catalog: dict) -> dict:
-    """loc id -> parsed week; unparseable hours yield no open days (and a lint finding)."""
+    """loc id -> parsed week; unparseable hours yield no open days."""
     out = {}
     for loc in catalog["locations"]:
         try:

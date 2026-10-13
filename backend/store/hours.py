@@ -6,7 +6,7 @@
 #   "Mon-Fri 8:00-12:00, 13:00-18:00; Sat 9-13; Sun closed"
 #   "Mon,Wed,Fri 7:30am-3pm"
 #   "Daily 9:00-21:00"
-# Anything else raises HoursError: an unparseable string is a lint finding, never a
+# Anything else raises HoursError: an unparseable string is an error, never a
 # silent pass-through. Times are datetime.time, so comparisons are never lexicographic.
 #
 

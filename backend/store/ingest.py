@@ -12,20 +12,18 @@
 import argparse
 import asyncio
 import json
+from collections import Counter
 import sys
 from datetime import date, datetime, timedelta
-from itertools import combinations
 from pathlib import Path
 
 import asyncpg
-import numpy as np
 from dotenv import load_dotenv
 
 from . import calendar, embeddings
 from .bundle import Bundle, list_bundles, load_bundle, normalize
 from .db import apply_schema, dsn
 from .hours import HoursError, parse_hours
-from .lint import lint
 
 load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
@@ -53,7 +51,23 @@ def embed_texts(bundle: Bundle) -> list:
     return rows
 
 
+def check(bundle: Bundle) -> None:
+    """Refuse a payload whose references don't resolve; everything else loads as given."""
+    cat, problems = bundle.catalog, []
+    for kind in ("locations", "providers", "appointment_types"):
+        problems += [f"duplicate {kind} id {i}" for i, n in Counter(x["id"] for x in cat[kind]).items() if n > 1]
+    for p in cat["providers"]:
+        problems += [f"{p['id']} works at unknown location {l}" for l in p["location_ids"] if l not in bundle.locations]
+        problems += [f"{p['id']} offers unknown type {t}" for t in p["appointment_type_ids"] if t not in bundle.types]
+    ids_by_name = bundle.type_ids_by_name()
+    problems += [f"patient {p['id']} has a referral for unknown type '{r['type']}'"
+                 for p in bundle.patients for r in p.get("referrals", []) if normalize(r["type"]) not in ids_by_name]
+    if problems:
+        raise ValueError(f"{bundle.name}: " + "; ".join(problems))
+
+
 async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) -> dict:
+    check(bundle)
     cv = bundle.version
     cat = bundle.catalog
     anchor = anchor or bundle.anchor
@@ -94,7 +108,7 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
                     for a, b in intervals:
                         hour_rows.append((cv, l["id"], d + 1, a, b))
             except HoursError:
-                pass  # reported by lint
+                pass  # unparseable hours: the location gets no open days (calendar.py)
         await conn.executemany(
             """INSERT INTO locations (catalog_version, id, name, address, city, phone, hours_text, place, geom)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8, ST_GeomFromText($9, 0))""", loc_rows)
@@ -149,7 +163,6 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
             cluster_rows.append((cv, c["id"], members, c["question"], json.dumps(hints), default))
         await conn.executemany("INSERT INTO ambiguity_clusters VALUES ($1,$2,$3,$4,$5::jsonb,$6)", cluster_rows)
 
-        similarities = None
         if embed:
             texts = embed_texts(bundle)
             vectors = await embeddings.embed(conn, [t for _, _, t in texts])
@@ -157,11 +170,6 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
                 "INSERT INTO type_embeddings VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
                 [(cv, tid, src, text, embeddings.MODEL, vectors[text])
                  for tid, src, text in texts])
-            names = {t["id"]: vectors[t["name"]] for t in cat["appointment_types"]}
-            similarities = {
-                (a, b): float(np.dot(names[a], names[b]))
-                for a, b in combinations(sorted(names), 2)
-            }
 
         # ---- patients --------------------------------------------------------------
         await conn.executemany(
@@ -185,17 +193,16 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
                VALUES ($1, 'base', $2, $2, 'pat_mock', $3, $4, $5, $6, $7)""",
             [(cv, f"PRE-{i:05d}", *row) for i, row in enumerate(prebooked)])
 
-        report = lint(bundle, similarities)
-        report["stats"] = {
+        stats = {
             "locations": len(cat["locations"]), "providers": len(cat["providers"]),
             "appointment_types": len(cat["appointment_types"]), "aliases": len(alias_rows),
             "clusters": len(cluster_rows), "schedules": len(schedules), "prebooked": len(prebooked),
             "embedded_texts": len(embed_texts(bundle)) if embed else 0,
         }
         await conn.execute(
-            "INSERT INTO catalogs (name, catalog_version, source_path, calendar_seed, calendar_anchor, lint) VALUES ($1,$2,$3,$4,$5,$6::jsonb)",
-            bundle.name, cv, str(bundle.path), bundle.seed, anchor, json.dumps(report))
-    return report
+            "INSERT INTO catalogs (name, catalog_version, source_path, calendar_seed, calendar_anchor) VALUES ($1,$2,$3,$4,$5)",
+            bundle.name, cv, str(bundle.path), bundle.seed, anchor)
+    return stats
 
 
 def _anchor(arg: str) -> date:
@@ -211,7 +218,6 @@ async def main(argv=None) -> None:
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--anchor", help="calendar start: YYYY-MM-DD or 'today' (defaults to the bundle's)")
     ap.add_argument("--no-embed", action="store_true")
-    ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
     names = list_bundles() if args.all else (args.bundles or ["given"])
     conn = await asyncpg.connect(dsn())
@@ -222,18 +228,9 @@ async def main(argv=None) -> None:
         for name in names:
             bundle = load_bundle(name)
             started = datetime.now()
-            report = await ingest(conn, bundle, _anchor(args.anchor) if args.anchor else None, not args.no_embed)
+            stats = await ingest(conn, bundle, _anchor(args.anchor) if args.anchor else None, not args.no_embed)
             ms = (datetime.now() - started).total_seconds() * 1000
-            print(f"[{name}] catalog_version={bundle.version} ingested in {ms:.0f} ms  {report['stats']}")
-            if not args.quiet:
-                for key, n in report["counts"].items():
-                    if n:
-                        items = report[key]
-                        print(f"  {key}: {n}")
-                        for item in items[:6]:
-                            print(f"    - {item}")
-                        if n > 6:
-                            print(f"    ... {n - 6} more")
+            print(f"[{name}] catalog_version={bundle.version} ingested in {ms:.0f} ms  {stats}")
     finally:
         await conn.close()
 

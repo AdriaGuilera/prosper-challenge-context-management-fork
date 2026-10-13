@@ -234,7 +234,7 @@ class PolicySet:
         return reasons or ["No bookable combination."]
 
 
-# ---- module-level API (the eval oracle, judge, generators and lint use these) ----------------
+# ---- module-level API (the eval oracle, judge, and generators use these) ----------------
 
 _SETS: dict = {}
 

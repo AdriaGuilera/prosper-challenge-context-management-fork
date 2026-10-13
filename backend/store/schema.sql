@@ -28,9 +28,9 @@ CREATE TABLE IF NOT EXISTS catalogs (
     source_path     text NOT NULL,
     calendar_seed   int  NOT NULL,
     calendar_anchor date NOT NULL,              -- first day the mocked calendar covers
-    ingested_at     timestamptz NOT NULL DEFAULT now(),
-    lint            jsonb NOT NULL DEFAULT '{}'
+    ingested_at     timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE catalogs DROP COLUMN IF EXISTS lint;   -- older databases
 
 -- ---- structural --------------------------------------------------------------
 

@@ -250,7 +250,7 @@ def _generated(name: str, seed: int, n_loc: int, n_prov: int, extra_types=False,
         orphans = [t for t in types if t["id"] not in offered][:2]
         types = [t for t in types if t["id"] in offered] + orphans
     if odd_hours:
-        locations[-1]["hours"] = "By appointment only"   # unparseable on purpose: a lint finding
+        locations[-1]["hours"] = "By appointment only"   # unparseable on purpose: that location gets no open days
     cat = {"locations": locations, "providers": providers, "appointment_types": types}
     lex = {"aliases": EXTRA_ALIASES, "clusters": EXTRA_CLUSTERS} if extra_types else None
     return write_bundle(name, cat, _places(locations), _patients(rng, types),
