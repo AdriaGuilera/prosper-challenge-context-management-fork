@@ -25,10 +25,6 @@ class PlaceResolution:
     confusable_with: list = field(default_factory=list)
 
 
-async def gazetteer_version(conn) -> str:
-    return await conn.fetchval("SELECT gazetteer_version FROM gazetteer_places ORDER BY gazetteer_version DESC LIMIT 1")
-
-
 async def resolve_place(conn, text: str) -> PlaceResolution:
     q = normalize(text)
     for filler in ("near ", "close to ", "around ", "by ", "in "):
@@ -36,15 +32,14 @@ async def resolve_place(conn, text: str) -> PlaceResolution:
             q = q[len(filler):]
     if not q:
         return PlaceResolution("unknown")
-    gv = await gazetteer_version(conn)
     rows = await conn.fetch(
         """SELECT name, kind, ST_NumGeometries(geom) AS n,
-                  (SELECT max(greatest(similarity($2, s), word_similarity(s, $2))) FROM unnest(search_names) s) AS sim,
-                  $2 = ANY(search_names) AS exact,
-                  EXISTS (SELECT 1 FROM unnest(search_names) s WHERE position(' ' || s || ' ' IN ' ' || $2 || ' ') > 0) AS contained
-           FROM gazetteer_places WHERE gazetteer_version = $1
+                  (SELECT max(greatest(similarity($1, s), word_similarity(s, $1))) FROM unnest(search_names) s) AS sim,
+                  $1 = ANY(search_names) AS exact,
+                  EXISTS (SELECT 1 FROM unnest(search_names) s WHERE position(' ' || s || ' ' IN ' ' || $1 || ' ') > 0) AS contained
+           FROM gazetteer_places
            ORDER BY exact DESC, contained DESC, sim DESC LIMIT 6""",
-        gv, q)
+        q)
     exact = [r for r in rows if r["exact"] or r["contained"]]
     best = exact[0] if exact else (rows[0] if rows and rows[0]["sim"] >= FUZZY_MIN else None)
     if best is None:
@@ -59,19 +54,15 @@ async def resolve_place(conn, text: str) -> PlaceResolution:
         areas = await conn.fetch(
             """SELECT DISTINCT ON (pt.path) pt.path[1] AS i, g.name
                FROM gazetteer_places p, ST_Dump(p.geom) pt, gazetteer_places g
-               WHERE p.gazetteer_version = $1 AND p.name = $2 AND g.gazetteer_version = $1
+               WHERE p.name = $1
                  AND g.kind <> 'street' AND ST_NumGeometries(g.geom) = 1
                ORDER BY pt.path, ST_Distance(pt.geom, g.geom)""",
-            gv, best["name"])
+            best["name"])
         return PlaceResolution("ambiguous", place=best["name"],
                                candidates=[{"name": best["name"], "kind": best["kind"], "area": a["name"]} for a in areas])
     pt = await conn.fetchrow(
-        "SELECT ST_X(ST_GeometryN(geom, 1)) x, ST_Y(ST_GeometryN(geom, 1)) y FROM gazetteer_places WHERE gazetteer_version = $1 AND name = $2",
-        gv, best["name"])
+        "SELECT ST_X(ST_GeometryN(geom, 1)) x, ST_Y(ST_GeometryN(geom, 1)) y FROM gazetteer_places WHERE name = $1",
+        best["name"])
     return PlaceResolution("resolved", place=best["name"], point=(pt["x"], pt["y"]),
                            confusable_with=confusable if exact else [])
 
-
-async def near_km(conn) -> tuple:
-    """(near, far) thresholds are data in the gazetteer file; mirrored here for the tools."""
-    return 4.0, 9.0

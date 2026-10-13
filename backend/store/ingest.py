@@ -68,13 +68,12 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
         await conn.execute("DELETE FROM catalogs WHERE name = $1 OR catalog_version = $2", bundle.name, cv)
 
         # ---- gazetteer (shared) -------------------------------------------------
-        gv = bundle.gazetteer["version"]
-        await conn.execute("DELETE FROM gazetteer_places WHERE gazetteer_version = $1", gv)
+        await conn.execute("DELETE FROM gazetteer_places")
         await conn.executemany(
-            """INSERT INTO gazetteer_places (gazetteer_version, name, kind, aliases, search_names, geom)
-               VALUES ($1, $2, $3, $4, $5, ST_GeomFromText($6, 0))""",
+            """INSERT INTO gazetteer_places (name, kind, aliases, search_names, geom)
+               VALUES ($1, $2, $3, $4, ST_GeomFromText($5, 0))""",
             [
-                (gv, p["name"], p["kind"], p["aliases"],
+                (p["name"], p["kind"], p["aliases"],
                  [normalize(p["name"])] + [normalize(a) for a in p["aliases"]],
                  "MULTIPOINT(" + ",".join(f"({x} {y})" for x, y in p["points"]) + ")")
                 for p in bundle.gazetteer["places"]

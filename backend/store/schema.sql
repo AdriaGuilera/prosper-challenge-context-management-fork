@@ -240,14 +240,19 @@ $$;
 
 -- The one fictional gazetteer, shared by every catalog. A street is a MultiPoint:
 -- several points means it spans areas, which makes it ambiguous on its own.
+-- Reloaded whole on every ingest. (Older databases had a version column: drop and recreate.)
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'gazetteer_places' AND column_name = 'gazetteer_version') THEN
+        DROP TABLE gazetteer_places;
+    END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS gazetteer_places (
-    gazetteer_version text NOT NULL,
-    name              text NOT NULL,
+    name              text PRIMARY KEY,
     kind              text NOT NULL,
     aliases           text[] NOT NULL DEFAULT '{}',
     search_names      text[] NOT NULL,          -- normalised name + aliases
-    geom              geometry(MultiPoint, 0) NOT NULL,
-    PRIMARY KEY (gazetteer_version, name)
+    geom              geometry(MultiPoint, 0) NOT NULL
 );
 
 -- The only embedding cache: re-ingest and repeated eval phrasing never re-hit the API.
