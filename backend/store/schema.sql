@@ -137,17 +137,17 @@ CREATE TABLE IF NOT EXISTS ambiguity_clusters (
     PRIMARY KEY (catalog_version, id)
 );
 
--- Embeddings of type names and their aliases (decision 005), model pinned per row.
+-- Embeddings of type names and their aliases (decision 005), tagged with the model that made them.
 CREATE TABLE IF NOT EXISTS type_embeddings (
     catalog_version     text NOT NULL,
     appointment_type_id text NOT NULL,
     source              text NOT NULL,          -- 'name' | 'alias'
     text                text NOT NULL,
     model               text NOT NULL,
-    model_version       text NOT NULL,
     embedding           vector(1536) NOT NULL,
     PRIMARY KEY (catalog_version, appointment_type_id, source, text, model)
 );
+ALTER TABLE type_embeddings DROP COLUMN IF EXISTS model_version;   -- older databases
 
 -- ---- patient state (mocked registry) -----------------------------------------
 
@@ -250,7 +250,7 @@ CREATE TABLE IF NOT EXISTS gazetteer_places (
     PRIMARY KEY (gazetteer_version, name)
 );
 
--- Embedding cache, so re-ingest and repeated eval phrasing never re-hit the API.
+-- The only embedding cache: re-ingest and repeated eval phrasing never re-hit the API.
 CREATE TABLE IF NOT EXISTS embedding_cache (
     model     text NOT NULL,
     text      text NOT NULL,

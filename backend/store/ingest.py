@@ -155,8 +155,8 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
             texts = embed_texts(bundle)
             vectors = await embeddings.embed(conn, [t for _, _, t in texts])
             await conn.executemany(
-                "INSERT INTO type_embeddings VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING",
-                [(cv, tid, src, text, embeddings.MODEL, embeddings.MODEL_VERSION, vectors[text])
+                "INSERT INTO type_embeddings VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
+                [(cv, tid, src, text, embeddings.MODEL, vectors[text])
                  for tid, src, text in texts])
             names = {t["id"]: vectors[t["name"]] for t in cat["appointment_types"]}
             similarities = {
@@ -215,7 +215,6 @@ async def main(argv=None) -> None:
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
     names = list_bundles() if args.all else (args.bundles or ["given"])
-    embeddings.load_file_cache()
     conn = await asyncpg.connect(dsn())
     await apply_schema(conn)
     from pgvector.asyncpg import register_vector
@@ -237,7 +236,6 @@ async def main(argv=None) -> None:
                         if n > 6:
                             print(f"    ... {n - 6} more")
     finally:
-        embeddings.save_file_cache()
         await conn.close()
 
 
