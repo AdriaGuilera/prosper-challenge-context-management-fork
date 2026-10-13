@@ -51,6 +51,13 @@ def _group_table(rows: list, keys: tuple) -> list:
     return out
 
 
+def _target_cell(oracle: dict) -> str:
+    t = oracle.get("target")
+    if t:
+        return t["booking"] + (f" (+{t['equally_good']} equally good)" if t["equally_good"] else "")
+    return {"no_booking": "no booking", "information": "information only"}.get(oracle.get("outcome"), "–")
+
+
 def write_summary(out_dir: Path, rows: list, meta: dict) -> Path:
     lines = [f"# Eval run {meta['run_id']}", "",
              f"- conversations: {len(rows)}; catalogs: {', '.join(meta['catalogs'])}; models: {', '.join(meta['models'])}; "
@@ -66,14 +73,16 @@ def write_summary(out_dir: Path, rows: list, meta: dict) -> Path:
 
     lines += ["## Per case (pass k/N per model)", ""]
     models = sorted({(r["system"], r["model"]) for r in rows})
-    lines.append("| catalog | persona | behaviour | " + " | ".join(f"{s}:{m}" for s, m in models) + " |")
-    lines.append("|---|---|---|" + "---|" * len(models))
+    lines.append("| catalog | persona | behaviour | target booking | " + " | ".join(f"{s}:{m}" for s, m in models) + " |")
+    lines.append("|---|---|---|---|" + "---|" * len(models))
     cases = defaultdict(lambda: defaultdict(list))
+    targets = {}
     for r in rows:
         cases[(r["catalog"], r["persona"], r["behavior"])][(r["system"], r["model"])].append(r["pass"])
+        targets[(r["catalog"], r["persona"])] = _target_cell(r.get("oracle") or {})
     for (c, p, b), by_model in sorted(cases.items()):
         cells = [f"{sum(by_model[m])}/{len(by_model[m])}" if by_model[m] else "–" for m in models]
-        lines.append(f"| {c} | {p} | {b} | " + " | ".join(cells) + " |")
+        lines.append(f"| {c} | {p} | {b} | {targets[(c, p)]} | " + " | ".join(cells) + " |")
     lines.append("")
 
     lines += ["## By tag", "", "| tag | " + " | ".join(f"{s}:{m}" for s, m in models) + " |",

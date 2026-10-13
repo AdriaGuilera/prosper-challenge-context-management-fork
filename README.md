@@ -46,7 +46,7 @@ Remember to update the `.env` file accordingly.
 | --- | --- |
 | `backend/store/` | The Postgres store: `schema.sql` (normalised tables), `ingest.py` (refuses a payload whose ids don't resolve), `policies.py` (one function per booking policy, and the `PolicySet` every tool runs them through), `calendar.py` + `slots.py` (seeded calendar, SQL slots), `search.py` (alias + full text + pgvector, fused), `geo.py` (gazetteer + KNN). |
 | `backend/catalogs/` | Catalog bundles: the payload plus what we derive for it (gazetteer mapping, lexicon, patient registry, calendar seed). `given/` points at the untouched `data/catalog.json`; `gen-*` and `adv-*` are variants and hand-built adversarial catalogs (`python -m evals.catalog_gen`). `gazetteer.json` is the one fictional map. |
-| `backend/evals/` | The text-mode eval: runner over the real node graph, caller simulator, per-catalog oracle (the answer key), LLM judge (pass/fail and quality, gpt-5.6-terra by default), scenario generators, naive baseline, report. |
+| `backend/evals/` | The text-mode eval: runner over the real node graph, caller simulator, per-catalog oracle (the answer key, including the one target booking each caller is aiming for), LLM judge (pass/fail and quality, gpt-5.6-terra by default), scenario generators, naive baseline, report. |
 | `eval/personas/`, `eval/behaviors/` | Hand-written personas (catalog-independent) and reusable behaviour profiles. Runs land in `eval/runs/` (gitignored). |
 
 ```bash

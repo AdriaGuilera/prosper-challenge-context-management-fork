@@ -125,6 +125,14 @@ def answer_key(o: Oracle, bundle: Bundle, persona: dict) -> str:
         names = sorted(P[p]["name"] for p in o.provider_match if p in P)
         lines.append(f"Provider the caller asked for: {' or '.join(names)} "
                      f"({'they insisted on this provider' if o.provider_strict else 'a preference, not a requirement'}).")
+    if o.target:
+        t = o.target
+        lines.append(f"TARGET BOOKING (what this caller is aiming for): {t['text']}. Time: {t['time_rule']}"
+                     + (f"; {t['equally_good']} other booking(s) of the same visit tier"
+                        + (" at the same time" if "soonest" in t["time_rule"] else "")
+                        + " are equally good" if t["equally_good"] else "") + ".")
+    elif o.outcome == "no_booking":
+        lines.append("TARGET BOOKING: none. The right outcome is to explain why it can't be booked, and not book it.")
     if o.constrained:
         opts = sorted({(P[p]["name"], L[l]["name"]) for p, l, _ in o.constrained})
         shown = "; ".join(f"{p} at {l}" for p, l in opts[:15]) + ("; ..." if len(opts) > 15 else "")

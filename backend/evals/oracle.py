@@ -43,6 +43,7 @@ class Oracle:
     info: list = field(default_factory=list)       # resolved information expectations
     ask_labels: dict = field(default_factory=dict)  # must_ask -> words a question that asks it would name
     patient_ref: Optional[object] = None            # records a booking may land on: {ids} of this person, or "new"
+    target: Optional[dict] = None                   # the one booking this caller is aiming for, in this catalog
     notes: list = field(default_factory=list)
 
     def summary(self) -> dict:
@@ -51,7 +52,15 @@ class Oracle:
             "constrained": len(self.constrained), "best_locations": sorted(self.best_locations),
             "soonest": self.soonest.isoformat() if self.soonest else None,
             "must_ask": self.must_ask, "must_state": self.must_state, "info": self.info, "notes": self.notes,
+            "target": target_summary(self.target),
         }
+
+
+def target_summary(t: Optional[dict]) -> Optional[dict]:
+    if not t:
+        return None
+    return {"booking": t["text"], "start": t["start"].isoformat(timespec="minutes"), "time_rule": t["time_rule"],
+            "equally_good": t["equally_good"], "ids": [t["appointment_type_id"], t["provider_id"], t["location_id"]]}
 
 
 # ---- geography (independent of PostGIS) ------------------------------------------
@@ -214,6 +223,8 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
         o.on_or_after = date.fromisoformat(exp["on_or_after"])
     if exp.get("time") == "soonest" and constrained:
         o.soonest = _soonest(bundle, anchor, clock, target, o)
+    if o.outcome == "booking":
+        o.target = _target(bundle, anchor, clock, target, o, exp.get("time") == "soonest")
 
     # registered-cluster asks only apply where the cluster exists among offered types
     for ask in exp.get("must_ask", []):
@@ -290,6 +301,42 @@ def _soonest(bundle: Bundle, anchor: date, clock: datetime, triples: set, o: Ora
                 best = s
             break
     return best
+
+
+def _target(bundle: Bundle, anchor: date, clock: datetime, triples: set, o: Oracle, soonest_matters: bool) -> Optional[dict]:
+    """The single booking this caller is aiming for: the best visit tier, then the nearest suitable
+    location, then the earliest slot their time preferences allow, then ids (a stable tie-break).
+    `equally_good` counts the other bookings the grading would score the same."""
+    schedules, bookings = _calendar(bundle, anchor)
+    types, provs, locs = bundle.types, bundle.providers, bundle.locations
+    start = clock + calendar.LEAD
+    if o.on_or_after:
+        start = max(start, datetime.combine(o.on_or_after, time()))
+    rank = {"ideal": 0, "acceptable": 1, "suboptimal": 2}
+    options = []
+    for prov, loc, tid in triples:
+        if o.best_locations and loc not in o.best_locations:
+            continue
+        for s in calendar.free_slots(schedules, bookings, prov, loc, types[tid]["duration_min"], start):
+            if (o.part_of_day == "morning" and s.hour >= 12) or (o.part_of_day == "afternoon" and s.hour < 12):
+                continue
+            options.append((rank.get(o.type_tier.get(tid), 3), s, prov, loc, tid))
+            break
+    if not options:
+        return None
+    best = min(options)
+    same = [x for x in options if x[0] == best[0] and (not soonest_matters or x[1] == best[1])]
+    rule = "the soonest slot" if soonest_matters else "any time that suits the caller"
+    if o.part_of_day:
+        rule += f", in the {o.part_of_day}"
+    if o.on_or_after:
+        rule += f", not before {o.on_or_after:%A %B %-d}"
+    tier, s, prov, loc, tid = best
+    clock_text = s.strftime("%-I%p") if s.minute == 0 else s.strftime("%-I:%M%p")
+    text = (f"{types[tid]['name']} with {provs[prov]['name']} at {locs[loc]['name']}, "
+            f"{s:%A %B %-d} at {clock_text.lower()}")
+    return {"appointment_type_id": tid, "provider_id": prov, "location_id": loc, "start": s, "text": text,
+            "time_rule": rule, "equally_good": len(same) - 1}
 
 
 def _resolve_info(bundle: Bundle, item: dict) -> dict:

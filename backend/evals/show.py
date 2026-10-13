@@ -13,6 +13,8 @@ def show(path: Path) -> None:
     d = json.loads(path.read_text())
     row = d["row"]
     print(f"== {row['job']}  {'PASS' if row['pass'] else 'FAIL'} {row['tier']}  {row['violations'] + row['failures'] + row['tier_reasons']}")
+    target = (row.get("oracle") or {}).get("target")
+    print(f"   target: {target['booking'] + ' (' + target['time_rule'] + ')' if target else (row.get('oracle') or {}).get('outcome')}")
     print(f"   oracle: {json.dumps(row['oracle'])[:400]}")
     args = {e["id"]: e.get("args") for e in d["events"] if e["type"] == "tool_started"}
     for e in d["events"]:
