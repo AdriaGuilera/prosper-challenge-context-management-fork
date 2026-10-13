@@ -233,6 +233,10 @@ can't tell the difference between an agent that queried well and one that guesse
 
 ## 7. Judging: two judges, one gate
 
+> **Superseded 2026-10-13.** The judge is now a single LLM call that grades against the oracle's answer key. On saved
+> transcripts it caught real mistakes the rules below missed (see [results.md](results.md), "The judge is now an LLM").
+> The text below is the original design.
+
 **Deterministic judge — the pass/fail gate.** Pure code against the event log and the oracle:
 final booking state ∈ the conditional expectation set; no invariant violated; no forbidden
 outcome; budget respected. No LLM anywhere in the correctness path. If correctness depends on

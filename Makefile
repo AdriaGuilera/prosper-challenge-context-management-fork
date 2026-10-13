@@ -45,8 +45,8 @@ ingest: ## Ingest catalogs into Postgres (CATALOG=given|all|<name>, ANCHOR=today
 MODELS ?= gpt-4o-mini
 N ?= 3
 CASES ?=
-eval: ## Run the eval: CATALOG=given|all|<name> MODELS=gpt-4o,gpt-4o-mini N=3 CASES=<glob> BASELINE=1
-	cd backend && ../$(PYTHON) -m evals.run --catalog $(CATALOG) --models $(MODELS) --n $(N) $(if $(CASES),--cases '$(CASES)',) $(if $(BASELINE),--baseline,) $(if $(JUDGE),--llm-judge,)
+eval: ## Run the eval: CATALOG=given|all|<name> MODELS=gpt-4o,gpt-4o-mini N=3 CASES=<glob> BASELINE=1 JUDGE=<judge model>
+	cd backend && ../$(PYTHON) -m evals.run --catalog $(CATALOG) --models $(MODELS) --n $(N) $(if $(CASES),--cases '$(CASES)',) $(if $(BASELINE),--baseline,) $(if $(JUDGE),--judge-model $(JUDGE),)
 
 smoke-pipeline: ## The real Pipecat pipeline (FlowManager + LLM + tools), text in place of audio
 	cd backend && ../$(PYTHON) -m evals.pipeline_smoke

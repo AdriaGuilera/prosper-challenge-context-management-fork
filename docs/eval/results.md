@@ -17,6 +17,12 @@ are gitignored, so this file is the record. Every number below names its run id 
 | conversations with a safety-invariant break (given) | 0–1 / 74 | 16–34 / 74 |
 | $/conversation, gpt-4o, given | $0.050 | $0.119 |
 
+> **Judge note (2026-10-13).** Every pass rate in stages 1–4, the SQL experiment and the PolicySet check was produced by
+> the rule-based judge, which has since been replaced by an LLM judge. On a 150-conversation sample the two agree on
+> 87% of verdicts; the LLM is stricter, mostly on real mistakes the rules missed (see
+> [The judge is now an LLM](#the-judge-is-now-an-llm-judge-agreement-20261013-192414)). Expect re-judged numbers to
+> come out somewhat lower, the baseline and SQL agent more than the tools agent.
+
 - Accuracy and cost move in the same direction: the agent that sees less is right more often.
 - Its context does not grow with the catalog. The baseline's grows linearly.
 - The model choice matters far less than the context design:
@@ -41,13 +47,13 @@ Eval:
 - **Text runner.** It reproduces Pipecat Flows semantics on the builder's own handler closures, so a text conversation exercises exactly the code a voice call does.
 - **Caller simulator.** A fixed model (gpt-4o, T=0.6) plays the caller. It sees only the loader's briefing, which a leak tripwire test guards.
 - **Oracle.** Each persona's ground truth is computed per catalog by the reference engine, the seeded calendar and the gazetteer. Nothing is stored per persona.
-- **Gate.** The deterministic judge decides pass/fail:
+- **Gate.** At the time of these runs, a rule-based judge decided pass/fail (now replaced by an LLM judge, see below):
   - safety invariants: an invalid triple, booking without an explicit yes, booking without a read-back of the doctor/place and time, a provider offered at a site they don't work at, a time no lookup returned, a booking claimed that doesn't exist, the wrong patient record;
   - an outcome tier of acceptable or better;
   - required questions asked before booking;
   - required facts stated;
   - information answers.
-- **LLM judge.** It scores quality only and never moves the gate.
+- **LLM judge.** At the time, it scored quality only and never moved the gate.
 
 Catalogs:
 - `given`;
@@ -257,7 +263,8 @@ which the offline benchmark isolates.
 `backend/evals/pipeline_smoke.py` builds the same pipeline as `bot.run_bot`: `OpenAILLMService`,
 `LLMContextAggregatorPair`, `PipelineWorker`, `pipecat_flows.FlowManager` and `AgentBuilder` over the Postgres tools. It
 replaces only WebRTC, STT and TTS: the caller simulator's words are injected as user turns, and the LLM's text frames
-are collected where TTS would read them. The same deterministic judge then grades the call.
+are collected where TTS would read them. The same judge as the text eval then grades the call (rule-based for the
+results below; the LLM judge since 2026-10-13).
 
 On the agent's configured model (gpt-4o), all three calls pass:
 
@@ -337,6 +344,64 @@ questions with fixed answers are. Small sample (N=2, one catalog), but the gap i
 No regression. The one wrong booking (mini on `spanish-pediatrician-sick-kid`) has failed on mini in about half its
 runs since stage 1. Refusals now name the policy (`"policies": ["6"]`), and the 300-provider catalog's full
 policy pass takes 11 ms.
+
+## The judge is now an LLM (`judge-agreement-20261013-192414`)
+
+**What changed.** The rule-based judge (regexes over the transcript plus `grade_booking`) is gone. One LLM call per
+conversation (`evals/judge.py`) now decides everything: invariants, outcome tier, required questions and statements,
+information answers, and the 1–5 quality scores. The oracle is still code. It is the ground truth for what this
+caller should get in this catalog, and the judge gets it as an **answer key in names** (visit types by tier, the
+provider asked for, the bookable options, the nearest locations, the soonest slot, what must be asked or stated).
+The judge also gets the whole call in order (caller and assistant lines, every tool call and result) and the
+bookings actually written to the database, with the policy check of each. `pass` is still the same fixed combination
+(no violation, no failure, tier at least acceptable).
+
+**Which model judges.** `evals/judge_agreement.py` re-judged a stratified sample of saved transcripts: 150
+conversations, 50 per system (tools, baseline, SQL), half of them old failures. It compares against the verdicts saved
+by the rule-based judge.
+
+| judge | pass/fail agreement | tier agreement | old violations it also caught | cost (150 convs) |
+|---|---|---|---|---|
+| gpt-4o (first rubric) | 69% | 71% | 9 / 19 | $0.76 |
+| gpt-5.6-terra (first rubric) | 84% | 95% | 9 / 19 | $1.36 |
+| **gpt-5.6-terra (final rubric)** | **87%** | **93%** | **18 / 19** | **$1.36** |
+
+gpt-4o also passed 26 conversations the rules had failed, and it is one of the models under test, so it would grade
+itself. The default is `gpt-5.6-terra` (`--judge-model` / `JUDGE=` to change it). That is about $0.009 per
+conversation, roughly a fifth of what a gpt-4o agent conversation costs.
+
+**Who was right when they disagreed.** Every disagreement was checked by hand against its transcript.
+- Final rubric, 20 disagreements: **the LLM was right in 17**, wrong in 1 and unclear in 2. The one violation it
+  "missed" was itself a false alarm from the rules ("2:50" read as 2:50 am).
+- What the rules missed and the LLM caught:
+  - the agent read back one location and booked another (twice: Gary Park vs Cedar Hill, Richmond vs Maple Grove;
+    the rules only matched the surname);
+  - the agent offered provider/location pairs the booking check later refused;
+  - "Yes, we do eye exams!" (the clinic doesn't), passed by the rules because a later "don't have any available"
+    matched the "not offered" pattern;
+  - times invented by the SQL agent, passed by the rules because the SQL prompt's own example slot grid
+    ("09:00, 09:45, 10:30, 11:15") counted as a source;
+  - bookings straight after the caller picked a time, with no read-back and no yes (the rules trusted the
+    simulator's own "confirm" label).
+- What the LLM got wrong under the first rubric, now fixed in the rubric:
+  - it treated a caller picking a time as consent;
+  - it counted a *rejected* booking attempt as "the booking", so a reason stated after it seemed late;
+  - it didn't accept "we have several Dr. Nguyens, which one?" as asking;
+  - it added requirements from the caller's goal that weren't in the key;
+  - it worked out its own "soonest slot" when the key gave none (the 1 remaining error).
+
+**Acceptance cases.** The rule-based judge's 11 test conversations (every false pass and false fail found in review)
+all pass on terra. One is loose: about one run in three, the judge folds "you're all set" into the made-up
+confirmation-code finding instead of listing it separately. The verdict is a fail either way. (Those tests were
+removed along with the rest of `backend/tests` in `b508754`.)
+
+**Costs of the switch.**
+- A verdict is now a judgement. Re-judging the same transcript can occasionally flip a borderline case, and
+  `make smoke-pipeline`'s exit code is probabilistic.
+- Each conversation costs one judge call more than before, because quality used to be a separate, optional call
+  (`--no-llm-judge` is gone).
+- The pass rates above were produced by the rule-based judge. `python -m evals.rejudge <run_dir>` re-judges any saved
+  run without replaying it (about $0.009 per conversation; all ~1,500 saved conversations ≈ $14).
 
 ## Limits of this evidence
 

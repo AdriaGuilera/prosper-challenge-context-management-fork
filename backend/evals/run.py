@@ -116,12 +116,8 @@ async def converse(job: dict, max_turns: int) -> dict:
         await cleanup(conn, job["cv"], job["scope"])
 
     oracle = compute_oracle(persona, bundle, job["anchor"], job["clock"])
-    verdict = judges.deterministic(oracle, events, bookings, bundle)
-    if error:
-        verdict["pass"] = False
-        verdict["failures"].append(f"conversation error: {error}")
-    quality = await judges.llm_quality(events, meter=log) if job["llm_judge"] else None
-    return {"events": events, "verdict": verdict, "quality": quality, "oracle": oracle.summary(), "bookings": bookings,
+    verdict = await judges.judge(oracle, events, bookings, bundle, persona, model=job["judge_model"], meter=log, error=error)
+    return {"events": events, "verdict": verdict, "quality": verdict["quality"], "oracle": oracle.summary(), "bookings": bookings,
             "context_chars": runner.context_chars(), "ended": runner.ended, "error": error}
 
 
@@ -180,8 +176,7 @@ async def main(argv=None) -> None:
     ap.add_argument("--baseline", action="store_true", help="also run the naive full-catalog-in-prompt agent")
     ap.add_argument("--baseline-only", action="store_true")
     ap.add_argument("--systems", default="", help="explicit list, e.g. tools,baseline")
-    ap.add_argument("--llm-judge", dest="llm_judge", action="store_true", default=True)
-    ap.add_argument("--no-llm-judge", dest="llm_judge", action="store_false")
+    ap.add_argument("--judge-model", default=judges.JUDGE_MODEL, help="the LLM that judges every conversation")
     ap.add_argument("--concurrency", type=int, default=8)
     ap.add_argument("--max-turns", type=int, default=16)
     ap.add_argument("--label", default="")
@@ -231,12 +226,12 @@ async def main(argv=None) -> None:
                             jobs.append({
                                 "id": jid, "persona": persona, "bundle": bundle, "cv": cv, "anchor": anchor,
                                 "clock": clock, "behavior": behaviors[b], "model": model, "system": system,
-                                "rep": rep, "scope": f"eval-{uuid.uuid4().hex[:12]}", "llm_judge": args.llm_judge,
+                                "rep": rep, "scope": f"eval-{uuid.uuid4().hex[:12]}", "judge_model": args.judge_model,
                                 "use_vectors": not args.no_vectors,
                             })
     random.Random(0).shuffle(jobs)  # spread models and catalogs over time (rate limits)
     meta = {"run_id": run_id, "args": vars(args), "jobs": len(jobs), "catalogs": names, "models": models,
-            "systems": systems, "started": datetime.now().isoformat()}
+            "systems": systems, "judge_model": args.judge_model, "started": datetime.now().isoformat()}
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=1))
     print(f"run {run_id}: {len(jobs)} conversations -> {out_dir}")
 

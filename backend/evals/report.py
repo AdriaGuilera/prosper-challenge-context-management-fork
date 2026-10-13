@@ -56,8 +56,9 @@ def write_summary(out_dir: Path, rows: list, meta: dict) -> Path:
              f"- conversations: {len(rows)}; catalogs: {', '.join(meta['catalogs'])}; models: {', '.join(meta['models'])}; "
              f"systems: {', '.join(meta['systems'])}",
              f"- args: `{meta['args']}`",
-             "- gate = deterministic judge (no invariant broken, outcome tier >= acceptable, required questions asked, "
-             "required facts stated). quality = LLM judge mean (1-5), never part of the gate.",
+             f"- judge = LLM ({meta.get('judge_model') or 'gpt-4o'}) against the oracle's answer key: pass = no invariant "
+             "broken, outcome tier >= acceptable, required questions asked, required facts stated. quality = the same "
+             "judge's 1-5 mean, never part of pass.",
              "- tool time is inside turn latency; simulator and judge tokens are excluded from cost.", ""]
     lines += ["## By system and model", ""] + _group_table(rows, ("system", "model")) + [""]
     if len({r["catalog"] for r in rows}) > 1:

@@ -11,7 +11,7 @@
 
 import math
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 from typing import Optional
 
 from store import calendar
@@ -21,10 +21,6 @@ from store.policies import PatientState, triple_problems, valid_triples
 
 TIERS = {"ideal": 1.0, "acceptable": 0.7, "suboptimal": 0.3, "wrong": 0.0}
 TIE_KM = 0.05
-
-
-def tier_min(*tiers: str) -> str:
-    return min(tiers, key=lambda t: TIERS[t])
 
 
 @dataclass
@@ -337,58 +333,3 @@ def _resolve_info(bundle: Bundle, item: dict) -> dict:
         names = [p["name"] for p in cat["providers"] if p["id"] in ids]
         return {"kind": "any_provider", "spec": spec, "providers": names}
     raise ValueError(f"unknown info expectation {item}")
-
-
-# ---- grading a booking ----------------------------------------------------------------
-
-
-def grade_booking(o: Oracle, booking: Optional[dict], bundle: Bundle) -> tuple:
-    """(tier, reasons) for the final booking state. booking: {provider_id, location_id,
-    appointment_type_id, starts_at (datetime)} or None."""
-    if o.outcome == "information":
-        return ("ideal", []) if booking is None else ("wrong", ["booked during an information-only call"])
-    if o.outcome == "no_booking":
-        if booking is None:
-            return "ideal", []
-        if not triple_problems(bundle.catalog, booking["provider_id"], booking["location_id"],
-                               booking["appointment_type_id"], patient=o.patient):
-            # the request as stated couldn't be met; the caller then took a valid alternative
-            # (another visit, another doctor). The judge only accepts this if the reason was
-            # said before the booking.
-            return "acceptable", ["booked a different visit the caller agreed to"]
-        return "wrong", ["booked something the oracle says can't be booked"]
-    if booking is None:
-        return "wrong", ["no booking made"]
-    tr = (booking["provider_id"], booking["location_id"], booking["appointment_type_id"])
-    problems = triple_problems(bundle.catalog, *tr, patient=o.patient)
-    if problems:
-        return "wrong", [f"invalid booking: {', '.join(problems)}"]
-    tier = o.type_tier.get(tr[2])
-    if tier is None:
-        return "wrong", [f"wrong appointment type {tr[2]}"]
-    reasons = [] if tier == "ideal" else [f"type is {tier}"]
-    if o.provider_match:
-        if tr[0] not in o.provider_match:
-            if o.provider_strict:
-                return "wrong", ["not the provider the caller asked for"]
-            if {c for c in o.constrained if c[0] in o.provider_match}:
-                tier = tier_min(tier, "suboptimal")
-                reasons.append("preferred provider was available but not booked")
-    elif o.constrained and tr not in o.constrained:
-        tier = tier_min(tier, "suboptimal")
-        reasons.append("outside the caller's stated preferences")
-    if o.best_locations and tr[1] not in o.best_locations:
-        tier = tier_min(tier, "acceptable" if tier == "ideal" else tier)
-        reasons.append("not the nearest suitable location")
-    start = booking["starts_at"]
-    if o.on_or_after and start.date() < o.on_or_after:
-        return "wrong", ["before the date the caller can come"]
-    if o.part_of_day == "morning" and start.hour >= 12 or o.part_of_day == "afternoon" and start.hour < 12:
-        tier = tier_min(tier, "suboptimal")
-        reasons.append(f"not in the {o.part_of_day}")
-    if o.soonest:
-        if start > o.soonest:
-            late = start - o.soonest
-            tier = tier_min(tier, "acceptable" if late <= timedelta(days=2) else "suboptimal")
-            reasons.append(f"{late} later than the soonest suitable slot")
-    return tier, reasons

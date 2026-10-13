@@ -7,7 +7,7 @@
 #   python -m evals.pipeline_smoke [persona ...]      # default: happy-flu-shot chen-echo-downtown
 #   SMOKE_MODEL=gpt-4o-mini python -m evals.pipeline_smoke   # override the agent JSON's model
 #
-# It then runs the same deterministic judge as the text eval. What it proves beyond the text
+# It then runs the same LLM judge as the text eval (so a PASS here is a judgement, not a rule check). What it proves beyond the text
 # runner: FlowManager.initialize/transition semantics, the async tool handlers inside a real
 # PipelineWorker, the context aggregators, and the builder's event sink, exactly as a call wires them.
 #
@@ -44,7 +44,7 @@ from agents_api import model_extra  # noqa: E402
 from store import db  # noqa: E402
 from store.bundle import load_bundle  # noqa: E402
 
-from .judge import deterministic  # noqa: E402
+from .judge import judge  # noqa: E402
 from .oracle import compute_oracle  # noqa: E402
 from .personas import load_behaviors, load_for_simulator, load_personas  # noqa: E402
 from .run import cleanup, seed_patient  # noqa: E402
@@ -146,7 +146,7 @@ async def call(persona: dict, model: str = None, max_turns: int = 14) -> dict:
             "SELECT confirmation, patient_id, provider_id, location_id, appointment_type_id, starts_at FROM appointments "
             "WHERE catalog_version = $1 AND scope = $2 AND status = 'booked' ORDER BY id", row["catalog_version"], scope)]
         await cleanup(conn, row["catalog_version"], scope)
-    verdict = deterministic(compute_oracle(persona, bundle, anchor, clock), events, bookings, bundle)
+    verdict = await judge(compute_oracle(persona, bundle, anchor, clock), events, bookings, bundle, persona)
     return {"events": events, "verdict": verdict, "bookings": bookings}
 
 
