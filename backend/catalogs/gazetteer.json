@@ -1,5 +1,4 @@
 {
-  "version": "gz-1",
   "note": "FICTIONAL geography on a synthetic plane, units are km. Names that echo a real city are reused as labels only; no coordinate here is a real place. Shared by catalog locations, personas and the caller-side point (decision 007).",
   "near_km": 4.0,
   "far_km": 9.0,
