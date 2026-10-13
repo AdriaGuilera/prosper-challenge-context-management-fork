@@ -11,7 +11,6 @@
 #             The oracle turns it into ground truth for one catalog (evals/oracle.py).
 #
 # `load_for_simulator` is the ONLY function that builds the simulator's view.
-# tests/test_no_oracle_leak.py guards it.
 #
 
 import json

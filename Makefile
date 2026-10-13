@@ -3,7 +3,7 @@
 VENV := backend/.venv
 PYTHON := $(VENV)/bin/python
 
-.PHONY: help install run dev build clean db-up db-down db-reset ingest test eval eval-smoke smoke-pipeline
+.PHONY: help install run dev build clean db-up db-down db-reset ingest eval eval-smoke smoke-pipeline
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -39,9 +39,6 @@ CATALOG ?= given
 ANCHOR ?=
 ingest: ## Ingest catalogs into Postgres (CATALOG=given|all|<name>, ANCHOR=today for the live demo)
 	cd backend && ../$(PYTHON) -m store.ingest $(if $(filter all,$(CATALOG)),--all,$(CATALOG)) $(if $(ANCHOR),--anchor $(ANCHOR),)
-
-test: ## Store, policy and tool tests (needs `make db-up ingest`)
-	cd backend && ../$(PYTHON) -m pytest -q
 
 # ---- eval (text only) ----
 

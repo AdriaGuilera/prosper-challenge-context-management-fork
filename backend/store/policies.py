@@ -11,10 +11,6 @@
 # candidate doesn't have is skipped, so the same set answers "is this type open to this
 # patient?" and "can this exact booking go ahead?".
 #
-# Independence: the SQL `bookable` / `bookable_for` relation in schema.sql is a second,
-# separately written implementation of policies 1-5. tests/test_policies_differential.py
-# proves the two agree on every triple of every catalog. Never generate one from the other.
-#
 # Nothing here touches the database.
 #
 

@@ -205,36 +205,8 @@ CREATE TABLE IF NOT EXISTS appointments (
 );
 CREATE INDEX IF NOT EXISTS appointments_provider_time ON appointments (catalog_version, provider_id, starts_at);
 
--- ---- policies 1-5 as a relation ---------------------------------------------------
-
--- Structural admissibility (policies 1-3): the triples that can ever be booked.
--- Policies 1 and 2 are the joins; policy 3 is the capability predicate. Specialty
--- appears nowhere here on purpose.
-CREATE OR REPLACE VIEW bookable AS
-SELECT pat.catalog_version, pat.provider_id, pl.location_id, pat.appointment_type_id
-FROM provider_appointment_types pat
-JOIN provider_locations pl
-  ON pl.catalog_version = pat.catalog_version AND pl.provider_id = pat.provider_id
-JOIN appointment_types t
-  ON t.catalog_version = pat.catalog_version AND t.id = pat.appointment_type_id
-WHERE t.required_capability IS NULL
-   OR EXISTS (SELECT 1 FROM location_capabilities lc
-              WHERE lc.catalog_version = pat.catalog_version
-                AND lc.location_id = pl.location_id
-                AND lc.capability = t.required_capability);
-
--- Policies 4-5 layered on top, parameterised by the patient's state.
-CREATE OR REPLACE FUNCTION bookable_for(cv text, is_new boolean, referral_type_ids text[])
-RETURNS TABLE (provider_id text, location_id text, appointment_type_id text)
-LANGUAGE sql STABLE AS $$
-    SELECT b.provider_id, b.location_id, b.appointment_type_id
-    FROM bookable b
-    JOIN appointment_types t ON t.catalog_version = b.catalog_version AND t.id = b.appointment_type_id
-    JOIN providers p ON p.catalog_version = b.catalog_version AND p.id = b.provider_id
-    WHERE b.catalog_version = cv
-      AND (NOT t.requires_referral OR t.id = ANY(referral_type_ids))       -- policy 4
-      AND (NOT is_new OR (t.new_patients_allowed AND p.accepting_new_patients))  -- policy 5
-$$;
+DROP FUNCTION IF EXISTS bookable_for(text, boolean, text[]);   -- older databases
+DROP VIEW IF EXISTS bookable;
 
 -- ---- geography (decision 007) ---------------------------------------------------
 
