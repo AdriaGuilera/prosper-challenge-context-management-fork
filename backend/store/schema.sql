@@ -1,4 +1,4 @@
--- Canonical store (decisions 001, 003, 005, 006, 007, 008, 013).
+-- Canonical store.
 --
 -- Every structural row is namespaced by catalog_version (sha of the payload), so
 -- several catalogs live side by side and an id like appt_002 never leaks across
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS locations (
     phone           text NOT NULL,
     hours_text      text NOT NULL,              -- as delivered; parsed into location_hours
     place           text,                       -- gazetteer place it maps to
-    geom            geometry(Point, 0),         -- synthetic plane, km (decision 013)
+    geom            geometry(Point, 0),         -- synthetic plane, km
     PRIMARY KEY (catalog_version, id)
 );
 CREATE INDEX IF NOT EXISTS locations_geom ON locations USING gist (geom);
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS location_capabilities (
 );
 CREATE INDEX IF NOT EXISTS location_capabilities_cap ON location_capabilities (catalog_version, capability);
 
--- Operational (decision 003): parsed from hours_text at ingest, weekday 1=Mon..7=Sun.
+-- Operational: parsed from hours_text at ingest, weekday 1=Mon..7=Sun.
 CREATE TABLE IF NOT EXISTS location_hours (
     catalog_version text NOT NULL,
     location_id     text NOT NULL,
@@ -118,7 +118,7 @@ CREATE INDEX IF NOT EXISTS pat_type ON provider_appointment_types (catalog_versi
 
 -- ---- meaning layer -----------------------------------------------------------
 
--- Curated caller phrasing -> candidate types (decision 009). Exact, free, offline.
+-- Curated caller phrasing -> candidate types. Exact, free, offline.
 CREATE TABLE IF NOT EXISTS type_aliases (
     catalog_version     text NOT NULL,
     phrase              text NOT NULL,          -- normalised: lowercase, single spaces
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS type_aliases (
     PRIMARY KEY (catalog_version, phrase, appointment_type_id)
 );
 
--- Registered ambiguity (decision 004): members a score alone must never pick between.
+-- Registered ambiguity: members a score alone must never pick between.
 CREATE TABLE IF NOT EXISTS ambiguity_clusters (
     catalog_version text NOT NULL,
     id              text NOT NULL,
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS ambiguity_clusters (
     PRIMARY KEY (catalog_version, id)
 );
 
--- Embeddings of type names and their aliases (decision 005), tagged with the model that made them.
+-- Embeddings of type names and their aliases, tagged with the model that made them.
 CREATE TABLE IF NOT EXISTS type_embeddings (
     catalog_version     text NOT NULL,
     appointment_type_id text NOT NULL,
@@ -208,7 +208,7 @@ CREATE INDEX IF NOT EXISTS appointments_provider_time ON appointments (catalog_v
 DROP FUNCTION IF EXISTS bookable_for(text, boolean, text[]);   -- older databases
 DROP VIEW IF EXISTS bookable;
 
--- ---- geography (decision 007) ---------------------------------------------------
+-- ---- geography ---------------------------------------------------
 
 -- The one fictional gazetteer, shared by every catalog. A street is a MultiPoint:
 -- several points means it spans areas, which makes it ambiguous on its own.

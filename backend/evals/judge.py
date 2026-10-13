@@ -22,7 +22,7 @@ from store.policies import triple_problems
 from . import llm
 from .oracle import TIERS, Oracle
 
-JUDGE_MODEL = "gpt-5.6-terra"   # chosen on agreement with hand-checked verdicts (docs/eval/results.md)
+JUDGE_MODEL = "gpt-5.6-terra"   # chosen on agreement with hand-checked verdicts
 MAX_RESULT_CHARS = 1500
 
 STATE_MEANING = {

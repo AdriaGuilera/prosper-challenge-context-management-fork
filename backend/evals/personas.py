@@ -1,7 +1,7 @@
 #
 # Personas: the simulated caller, in catalog-independent terms.
 #
-# A persona file holds three things (docs/eval/persona-design.md):
+# A persona file holds three things:
 #   caller    what the caller knows about themselves: name, date of birth, goal,
 #             preferences, how they answer questions. Plus `record`, the registry state
 #             we seed for them (existing patient? referrals?), which the caller does

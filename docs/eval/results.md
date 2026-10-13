@@ -1,7 +1,6 @@
 # Eval results: Phase 2 store and tools vs the naive baseline
 
-**Date:** 2026-10-07 · **Branch:** `feat/phase2-backend` · **Harness:** `backend/evals/` (design in
-[persona-design.md](persona-design.md)) · **Store:** [decision 013](../decisions/013-postgres-pgvector-postgis-built.md)
+**Date:** 2026-10-07 · **Branch:** `feat/phase2-backend` · **Harness:** `backend/evals/` · **Store:** `backend/store/`
 
 Run everything again with `make db-up ingest CATALOG=all`, then `make eval …` (see the README). Run directories
 are gitignored, so this file is the record. Every number below names its run id under `eval/runs/`.
@@ -255,7 +254,7 @@ that only the lexicon (aliases + registered clusters) fixes, and it was delibera
 **End-to-end vector ablation** (gpt-4o-mini, given, N=2): **76%** without pgvector vs 86% / 80% with it (stages 1
 and 4). The direction matches the offline benchmark (29 vs 22 right of 40), but at this N the end-to-end difference
 is suggestive, not conclusive. The given personas mostly use phrases the curated alias table already covers, and
-that coverage is exactly why decision 009 put aliases first. Vectors earn their place on phrasing nobody curated,
+that coverage is exactly why aliases come first. Vectors earn their place on phrasing nobody curated,
 which the offline benchmark isolates.
 
 ## The voice pipeline still works (`make smoke-pipeline`)
@@ -333,8 +332,8 @@ questions with fixed answers are. Small sample (N=2, one catalog), but the gap i
 
 ## Policies as one function each (`20261011-181219-policyset`)
 
-`store/policies.py` now has one function per policy, and every tool runs a `PolicySet` (decision 013, revised
-2026-10-11). Same eval as the SQL experiment's tools rows (given catalog, 20 personas, N=2):
+`store/policies.py` now has one function per policy, and every tool runs a `PolicySet`
+(2026-10-11). Same eval as the SQL experiment's tools rows (given catalog, 20 personas, N=2):
 
 | | Before | After |
 |---|---|---|

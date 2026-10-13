@@ -1,5 +1,5 @@
 #
-# Opening hours: free text in, per-weekday intervals out (decision 003).
+# Opening hours: free text in, per-weekday intervals out.
 #
 # Accepted shapes (case-insensitive, segments separated by ';' or '|'):
 #   "Mon-Fri 8:00-17:00"

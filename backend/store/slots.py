@@ -1,5 +1,5 @@
 #
-# Free slots in SQL, joined LAST (decision 008): only for the (provider, location)
+# Free slots in SQL, joined LAST: only for the (provider, location)
 # pairs that already survived resolution, ranking and the policy relation.
 #
 # Schedule blocks on the requested days, stepped by the type's duration, minus any

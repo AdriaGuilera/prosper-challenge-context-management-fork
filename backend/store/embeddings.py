@@ -1,5 +1,5 @@
 #
-# Embeddings for the meaning layer (decision 005): text-embedding-3-small.
+# Embeddings for the meaning layer: text-embedding-3-small.
 #
 # Postgres is the cache (embedding_cache): the API is called only for text it hasn't seen.
 #

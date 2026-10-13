@@ -1,5 +1,5 @@
 #
-# Meaning layer for appointment types (decisions 004, 005, 009).
+# Meaning layer for appointment types.
 #
 # Three rankers run INSIDE an already-constrained candidate set and are fused with
 # reciprocal rank fusion:
@@ -22,7 +22,7 @@ from .bundle import normalize
 RRF_K = 60
 GAP_ASK = 0.04        # vector top1 - top2 below this, with no lexical evidence: ask
 ABSOLUTE_MIN = 0.35   # best vector similarity below this: unsure, whatever else matched
-STRONG = 0.55         # at or above this the vector alone is confident (measured, see decision 013)
+STRONG = 0.55         # at or above this the vector alone is confident (measured)
 
 
 @dataclass
@@ -95,7 +95,7 @@ async def rank_types(conn, cv: str, query: str, candidates: list, use_vectors: b
     if use_vectors:
         try:
             vector = await _vector_ranking(conn, cv, query, candidates)
-        except Exception as e:  # degradation ladder (decision 008): lexical only, and say so
+        except Exception as e:  # degradation ladder: lexical only, and say so
             logger.warning(f"vector ranking unavailable, lexical only: {type(e).__name__}: {e}")
             vector = []
     sims = dict(vector)

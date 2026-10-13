@@ -1,5 +1,5 @@
 #
-# Markdown summary of a run: accuracy and cost side by side, always (persona-design §10).
+# Markdown summary of a run: accuracy and cost side by side, always.
 #
 
 import statistics

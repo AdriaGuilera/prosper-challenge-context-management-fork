@@ -3,8 +3,8 @@
 #
 # A node lists tool names in its `tools` field; AgentBuilder turns each into a
 # FlowsFunctionSchema that answers WITHOUT a transition. Every tool runs over the
-# Postgres store (decision 013), asynchronously (decision 011), and returns a
-# bounded, answer-shaped result (decision 008):
+# Postgres store, asynchronously, and returns a
+# bounded, answer-shaped result:
 #
 #   {total, shown, truncated, options[], ...}   never a bare row array, never a silent cut
 #

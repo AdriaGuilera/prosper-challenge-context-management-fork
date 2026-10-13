@@ -1,5 +1,5 @@
 #
-# Places (decisions 006, 007): a caller's spoken place -> a point on the fictional
+# Places: a caller's spoken place -> a point on the fictional
 # plane, then KNN over clinic locations. Distance ranks; it never admits.
 #
 # Resolution order: exact name/alias, then trigram. An exact hit that is still

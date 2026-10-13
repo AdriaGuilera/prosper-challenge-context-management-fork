@@ -10,7 +10,7 @@
 #     patients   the mocked patient registry (referrals by type name)
 #     calendar   {seed, anchor, density, prebook_rate}
 #
-# Every catalog maps into the one shared gazetteer (decision 007).
+# Every catalog maps into the one shared gazetteer.
 #
 
 import hashlib

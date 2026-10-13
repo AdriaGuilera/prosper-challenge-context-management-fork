@@ -1,5 +1,5 @@
 #
-# Async Postgres access (decision 011: no synchronous I/O in the turn path).
+# Async Postgres access (no synchronous I/O in the turn path).
 #
 
 import os

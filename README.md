@@ -37,14 +37,14 @@ Remember to update the `.env` file accordingly.
 | `backend/agents_api.py` | List / load / save agent JSON for the UI. A save is rejected unless `AgentBuilder` can compile it. |
 | `backend/agents/` | Agents **as data**. `clinic-scheduler.json` uses the catalog tools; `example-flow.json` is the original sample. |
 | `frontend/` | The builder UI: graph editor, inspector, and live test-call panel. |
-| `docs/` | The design record: `task.md`, `decisions/`, `approaches/`, `reviews/`, `eval/`, and `PRODUCT.md`. |
+| `docs/` | `task.md` (the challenge), `eval/results.md` (what the eval measured), and `PRODUCT.md`. |
 | `backend/data/catalog.json` | A deliberately large, deliberately messy clinic catalog (locations, providers, appointment types, booking rules) for the Phase 2 work. See [`backend/data/README.md`](backend/data/README.md). |
 
 ## The store and the eval (Phase 2)
 
 | Path | Responsibility |
 | --- | --- |
-| `backend/store/` | The Postgres store ([decision 013](docs/decisions/013-postgres-pgvector-postgis-built.md)): `schema.sql` (normalised tables), `ingest.py` (refuses a payload whose ids don't resolve), `policies.py` (one function per booking policy, and the `PolicySet` every tool runs them through), `calendar.py` + `slots.py` (seeded calendar, SQL slots), `search.py` (alias + full text + pgvector, fused), `geo.py` (gazetteer + KNN). |
+| `backend/store/` | The Postgres store: `schema.sql` (normalised tables), `ingest.py` (refuses a payload whose ids don't resolve), `policies.py` (one function per booking policy, and the `PolicySet` every tool runs them through), `calendar.py` + `slots.py` (seeded calendar, SQL slots), `search.py` (alias + full text + pgvector, fused), `geo.py` (gazetteer + KNN). |
 | `backend/catalogs/` | Catalog bundles: the payload plus what we derive for it (gazetteer mapping, lexicon, patient registry, calendar seed). `given/` points at the untouched `data/catalog.json`; `gen-*` and `adv-*` are variants and hand-built adversarial catalogs (`python -m evals.catalog_gen`). `gazetteer.json` is the one fictional map. |
 | `backend/evals/` | The text-mode eval: runner over the real node graph, caller simulator, per-catalog oracle (the answer key), LLM judge (pass/fail and quality, gpt-5.6-terra by default), scenario generators, naive baseline, report. |
 | `eval/personas/`, `eval/behaviors/` | Hand-written personas (catalog-independent) and reusable behaviour profiles. Runs land in `eval/runs/` (gitignored). |

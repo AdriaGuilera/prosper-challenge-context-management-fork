@@ -1,5 +1,5 @@
 #
-# Mocked calendar (decision 002): weekly working blocks per provider, generated
+# Mocked calendar: weekly working blocks per provider, generated
 # deterministically from a seed and clipped to the location's opening hours, plus
 # a deterministic set of pre-existing bookings so "soonest" is not just 8am Monday.
 #

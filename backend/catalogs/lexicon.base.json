@@ -1,5 +1,5 @@
 {
-  "note": "Curated caller phrasing -> appointment type NAMES (decision 009), plus registered ambiguity clusters with a question in the caller's words (decision 004). Keyed by name so it ports across catalogs; ingest resolves names to ids and lints the ones a catalog lacks.",
+  "note": "Curated caller phrasing -> appointment type NAMES, plus registered ambiguity clusters with a question in the caller's words. Keyed by name so it ports across catalogs; ingest resolves names to ids and lints the ones a catalog lacks.",
   "aliases": {
     "checkup": [
       "Annual Physical",
