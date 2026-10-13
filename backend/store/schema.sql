@@ -262,9 +262,3 @@ CREATE TABLE IF NOT EXISTS embedding_cache (
     embedding vector(1536) NOT NULL,
     PRIMARY KEY (model, text)
 );
-
--- The SQL experiment's agent (evals/sql_agent.py) runs its queries as this role: it holds no
--- privilege on any table, only SELECT on the per-call temp views that run_sql grants it.
-DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'agent_sql') THEN CREATE ROLE agent_sql NOLOGIN; END IF;
-END $$;

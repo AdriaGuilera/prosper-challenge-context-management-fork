@@ -43,7 +43,6 @@ class ToolContext:
     scope: str = "live"                                  # bookings land here; 'base' is shared
     clock: Callable[[], datetime] = datetime.now
     use_vectors: bool = True
-    require_offered: bool = True                         # policy 6 + "only offered times"; off for the SQL experiment
     session: dict = field(default_factory=dict)
     cv: Optional[str] = None
     enums: dict = field(default_factory=dict)
@@ -60,8 +59,7 @@ class ToolContext:
             bundle = load_bundle(self.catalog)
             if bundle.version != self.cv:
                 raise RuntimeError(f"Catalog '{self.catalog}' changed on disk since ingest. Run `make ingest`.")
-            # policy 6 is about the conversation; the SQL experiment has no offered slots to settle it with
-            self.policies = PolicySet(bundle.catalog, only=None if self.require_offered else {"1", "2", "3", "4", "5a", "5b"})
+            self.policies = PolicySet(bundle.catalog)
             self.enums = {
                 "specialty": [r[0] for r in await conn.fetch(
                     "SELECT DISTINCT specialty FROM (SELECT specialty FROM providers WHERE catalog_version = $1 "
@@ -540,62 +538,6 @@ async def list_slots(args: dict, ctx: ToolContext, conn) -> dict:
     return _bounded(options, limit=MAX_SLOT_OPTIONS, today=_today(ctx))
 
 
-# ---- raw SQL (experiment only) ----------------------------------------------------------
-
-# What the SQL agent sees: the catalog's tables as temp views that shadow the real ones, already
-# filtered to this catalog (and, for bookings, this call), without the bookkeeping columns.
-# Patients and referrals are left out: lookup_patient is the only way to the registry.
-SQL_VIEWS = {
-    "locations": "SELECT id, name, address, city, phone, hours_text, place, geom FROM public.locations WHERE catalog_version = {cv}",
-    "location_capabilities": "SELECT location_id, capability FROM public.location_capabilities WHERE catalog_version = {cv}",
-    "location_hours": "SELECT location_id, weekday, opens, closes FROM public.location_hours WHERE catalog_version = {cv}",
-    "providers": "SELECT id, name, title, specialty, accepting_new_patients FROM public.providers WHERE catalog_version = {cv}",
-    "provider_languages": "SELECT provider_id, language FROM public.provider_languages WHERE catalog_version = {cv}",
-    "provider_locations": "SELECT provider_id, location_id FROM public.provider_locations WHERE catalog_version = {cv}",
-    "appointment_types": "SELECT id, name, specialty, duration_min, requires_referral, new_patients_allowed, required_capability "
-                         "FROM public.appointment_types WHERE catalog_version = {cv}",
-    "provider_appointment_types": "SELECT provider_id, appointment_type_id FROM public.provider_appointment_types WHERE catalog_version = {cv}",
-    "type_aliases": "SELECT phrase, appointment_type_id FROM public.type_aliases WHERE catalog_version = {cv}",
-    "ambiguity_clusters": "SELECT id, members, question, member_hints, safer_default FROM public.ambiguity_clusters WHERE catalog_version = {cv}",
-    "schedules": "SELECT provider_id, location_id, weekday, starts, ends FROM public.schedules WHERE catalog_version = {cv}",
-    "appointments": "SELECT provider_id, location_id, starts_at, ends_at FROM public.appointments "
-                    "WHERE catalog_version = {cv} AND scope = ANY({scopes}) AND status = 'booked'",
-    "gazetteer_places": "SELECT name, kind, aliases, geom FROM public.gazetteer_places",
-}
-SQL_MAX_ROWS = 50
-
-
-def _lit(v: str) -> str:
-    return "'" + str(v).replace("'", "''") + "'"
-
-
-async def run_sql(args: dict, ctx: ToolContext, conn) -> dict:
-    """One read-only SELECT over the views above: 3 s timeout, at most 50 rows back, nothing
-    survives the call (the transaction is always rolled back)."""
-    query = (args.get("query") or "").strip().rstrip(";")
-    if not query:
-        return {"error": "Pass a SQL SELECT in 'query'."}
-    scopes = "ARRAY[" + ", ".join(_lit(s) for s in ctx.scopes) + "]"
-    tr = conn.transaction()
-    await tr.start()
-    try:
-        for name, body in SQL_VIEWS.items():
-            await conn.execute(f"CREATE TEMP VIEW {name} AS " + body.format(cv=_lit(ctx.cv), scopes=scopes))
-            await conn.execute(f"GRANT SELECT ON {name} TO agent_sql")
-        await conn.execute("SET LOCAL ROLE agent_sql")   # no rights on the real tables (patients, other calls)
-        await conn.execute("SET LOCAL transaction_read_only = on")
-        await conn.execute("SET LOCAL statement_timeout = '3s'")
-        try:
-            rows = await conn.fetch(query)
-        except Exception as e:  # the model's SQL error goes back to the model
-            return {"error": f"{type(e).__name__}: {str(e).splitlines()[0][:300]}"}
-    finally:
-        await tr.rollback()
-    out = [{k: (v if isinstance(v, (int, float, bool, str, type(None), list)) else str(v)) for k, v in dict(r).items()}
-           for r in rows[:SQL_MAX_ROWS]]
-    return {"total": len(rows), "shown": len(out), "truncated": len(rows) > SQL_MAX_ROWS, "rows": out}
-
-
 # ---- booking -------------------------------------------------------------------------
 
 
@@ -636,7 +578,7 @@ async def book_appointment(args: dict, ctx: ToolContext, conn) -> dict:
     if broken:
         return {"booked": False, "problems": [v.reason for v in broken], "policies": [v.policy for v in broken]}
     # no invented times: the exact provider, site, type and time must have been offered
-    if ctx.require_offered and (provider_id, location_id, type_id, start_key) not in offered:
+    if (provider_id, location_id, type_id, start_key) not in offered:
         same_slot = [o for o in offered if o[0] == provider_id and o[1] == location_id and o[3] == start_key]
         if len(same_slot) == 1:
             return {"booked": False, "problems": [
@@ -767,15 +709,6 @@ TOOLS = {
             {"provider_id": _ID, "location_id": _ID, "appointment_type_id": _ID},
             ["provider_id", "location_id", "appointment_type_id"],
             list_slots,
-            hidden=True,
-        ),
-        Tool(
-            "run_sql",
-            "Run one read-only PostgreSQL SELECT against the clinic database (schema in your instructions). "
-            "Returns at most 50 rows; errors come back as text so you can fix the query.",
-            {"query": {"type": "string", "description": "A single SELECT statement."}},
-            ["query"],
-            run_sql,
             hidden=True,
         ),
         Tool(

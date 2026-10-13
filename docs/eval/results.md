@@ -279,6 +279,9 @@ change.
 
 Question: instead of six purpose-built tools, what if the agent gets the database schema and writes its own SQL?
 
+> The SQL agent was removed after this experiment (`evals/sql_agent.py`, the `run_sql` tool and the `agent_sql`
+> role are gone). To reproduce, check out a commit before the removal. The findings below are why it was removed.
+
 **Setup** (`evals/sql_agent.py`, `--systems tools,sql`).
 - The prompt holds the documented schema (13 tables, what the columns mean), the six booking policies, and the
   calendar conventions the tools normally hide: the slot grid, the 30-minute lead and the 21-day horizon. It carries no

@@ -31,7 +31,6 @@ from store.bundle import list_bundles, load_bundle, normalize  # noqa: E402
 
 from . import judge as judges  # noqa: E402
 from .baseline import baseline_config  # noqa: E402
-from .sql_agent import sql_config  # noqa: E402
 from .generators import generate_personas  # noqa: E402
 from .oracle import compute_oracle, seeded_patient_id  # noqa: E402
 from .personas import EVAL_DIR, load_behaviors, load_for_simulator, load_personas  # noqa: E402
@@ -77,11 +76,9 @@ async def converse(job: dict, max_turns: int) -> dict:
 
     persona, bundle = job["persona"], job["bundle"]
     ctx = ToolContext(catalog=bundle.name, scope=job["scope"], clock=lambda: job["clock"],
-                      use_vectors=job.get("use_vectors", True), require_offered=job["system"] != "sql")
+                      use_vectors=job.get("use_vectors", True))
     if job["system"] == "baseline":
         config = baseline_config(bundle, job["model"])
-    elif job["system"] == "sql":
-        config = sql_config(bundle, job["model"], job["clock"])
     else:
         config = json.loads(AGENT_PATH.read_text())
     config["model"] = job["model"]
@@ -182,7 +179,7 @@ async def main(argv=None) -> None:
     ap.add_argument("--max-generated", type=int, default=12, help="generated personas per catalog")
     ap.add_argument("--baseline", action="store_true", help="also run the naive full-catalog-in-prompt agent")
     ap.add_argument("--baseline-only", action="store_true")
-    ap.add_argument("--systems", default="", help="explicit list, e.g. tools,baseline,sql (sql = schema + raw SQL experiment)")
+    ap.add_argument("--systems", default="", help="explicit list, e.g. tools,baseline")
     ap.add_argument("--llm-judge", dest="llm_judge", action="store_true", default=True)
     ap.add_argument("--no-llm-judge", dest="llm_judge", action="store_false")
     ap.add_argument("--concurrency", type=int, default=8)
