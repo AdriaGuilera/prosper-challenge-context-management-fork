@@ -153,7 +153,7 @@ The baseline's prompt grows about 4× from the given catalog to this one, and it
 
 These are the hardest hand cases. Many of them ask for something gen-large doesn't have (no Dr. Chen in cardiology, other Nguyens), so the right answer is a refusal followed by an alternative. The tools agent's prompt is the same size it was on 8 locations.
 
-## The meaning layer: do embeddings earn their place? (`python -m evals.search_eval`)
+## The meaning layer: do embeddings earn their place? (`evals/search_eval.py`, since removed)
 
 Offline, with no LLM: 40 lay phrases ("my heart keeps racing", "I have the flu, I feel awful", "hello") and their acceptable types.
 
@@ -259,7 +259,9 @@ which the offline benchmark isolates.
 
 ## The voice pipeline still works (`make smoke-pipeline`)
 
-`backend/evals/pipeline_smoke.py` builds the same pipeline as `bot.run_bot`: `OpenAILLMService`,
+> `backend/evals/pipeline_smoke.py` and `make smoke-pipeline` were removed after these runs; recover them from git (`63520d9`).
+
+`backend/evals/pipeline_smoke.py` built the same pipeline as `bot.run_bot`: `OpenAILLMService`,
 `LLMContextAggregatorPair`, `PipelineWorker`, `pipecat_flows.FlowManager` and `AgentBuilder` over the Postgres tools. It
 replaces only WebRTC, STT and TTS: the caller simulator's words are injected as user turns, and the LLM's text frames
 are collected where TTS would read them. The same judge as the text eval then grades the call (rule-based for the
@@ -395,8 +397,7 @@ confirmation-code finding instead of listing it separately. The verdict is a fai
 removed along with the rest of `backend/tests` in `b508754`.)
 
 **Costs of the switch.**
-- A verdict is now a judgement. Re-judging the same transcript can occasionally flip a borderline case, and
-  `make smoke-pipeline`'s exit code is probabilistic.
+- A verdict is now a judgement. Re-judging the same transcript can occasionally flip a borderline case.
 - Each conversation costs one judge call more than before, because quality used to be a separate, optional call
   (`--no-llm-judge` is gone).
 - The pass rates above were produced by the rule-based judge and have not been re-judged. The re-judge script was
