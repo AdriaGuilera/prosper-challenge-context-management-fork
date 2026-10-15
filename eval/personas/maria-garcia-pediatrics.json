@@ -3,7 +3,7 @@
   "description": "'Dr. Maria Garcia' is two people (Pediatrics MD vs Family Medicine NP).",
   "tags": [
     "collision:fullname",
-    "cluster"
+    "lookalike"
   ],
   "behaviors": [
     "cooperative"

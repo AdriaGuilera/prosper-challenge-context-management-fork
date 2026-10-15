@@ -42,7 +42,6 @@ class ToolContext:
     catalog: str = "given"
     scope: str = "live"                                  # bookings land here; 'base' is shared
     clock: Callable[[], datetime] = datetime.now
-    use_vectors: bool = True
     session: dict = field(default_factory=dict)
     cv: Optional[str] = None
     enums: dict = field(default_factory=dict)
@@ -164,15 +163,13 @@ def _patient_block(ctx: ToolContext, t, patient: Optional[dict]) -> Optional[str
     return " ".join(x.reason for x in v) or None
 
 
-def _type_option(ctx: ToolContext, t, hint: Optional[str], patient: Optional[dict]) -> dict:
+def _type_option(ctx: ToolContext, t, patient: Optional[dict]) -> dict:
     opt = {
         "appointment_type_id": t["id"], "name": t["name"], "specialty": t["specialty"],
         "duration_min": t["duration_min"], "needs_referral": t["requires_referral"],
         "open_to_new_patients": t["new_patients_allowed"],
         "needs_capability": t["required_capability"], "offered_here": t["offered"],
     }
-    if hint:
-        opt["pick_if_caller_wants"] = hint
     block = _patient_block(ctx, t, patient)
     if block:
         opt["blocked_for_this_patient"] = block
@@ -196,13 +193,13 @@ async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
             ctx.cv, spec, allowed)]
 
     candidates = await _candidates(specialty)
-    ranking = await rank_types(conn, ctx.cv, query, candidates, ctx.use_vectors)
+    ranking = await rank_types(conn, ctx.cv, query, candidates)
     specialty_note = None
     if specialty and (provider_id or location_id) and ranking.status not in ("match", "ask"):
         # Narrowed to a particular provider or site, a specialty label is redundant and often wrong
         # (a visit's label needn't match its provider's): if it kept the words from matching, drop it.
         wider = await _candidates(None)
-        retry = await rank_types(conn, ctx.cv, query, wider, ctx.use_vectors)
+        retry = await rank_types(conn, ctx.cv, query, wider)
         if retry.status in ("match", "ask"):
             candidates, ranking, specialty = wider, retry, None
             specialty_note = (f"Matched without the specialty filter: visit types are labelled loosely, so "
@@ -216,24 +213,23 @@ async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
     if minor and not specialty and ranking.status in ("match", "ask", "unsure"):
         # The patient is a child. Specialty is never an eligibility key, but it is a fair
         # ranking signal: if the words landed on adult visits, rank inside pediatrics too.
-        top = await _type_rows(conn, ctx, list(ranking.candidates) or [t for t, _, _ in ranking.ranked[:1]])
+        top = await _type_rows(conn, ctx, list(ranking.candidates) or [t for t, _ in ranking.ranked[:1]])
         if not any(r["specialty"] == "Pediatrics" for r in top.values()):
             peds = [r["id"] for r in await conn.fetch(
                 "SELECT id FROM appointment_types WHERE catalog_version = $1 AND specialty = 'Pediatrics' AND id = ANY($2)",
                 ctx.cv, candidates)]
-            child = await rank_types(conn, ctx.cv, query, peds, ctx.use_vectors) if peds else None
+            child = await rank_types(conn, ctx.cv, query, peds) if peds else None
             if child and child.ranked:
-                child_rows = await _type_rows(conn, ctx, [t for t, _, _ in child.ranked[:3]])
-                options = [_type_option(ctx, child_rows[t], None, patient) for t, _, _ in child.ranked[:3] if t in child_rows]
+                child_rows = await _type_rows(conn, ctx, [t for t, _ in child.ranked[:3]])
+                options = [_type_option(ctx, child_rows[t], patient) for t, _ in child.ranked[:3] if t in child_rows]
                 return {"status": "ask", **_bounded(options, total=len(child.ranked)),
                         "choose_between": [o["name"] for o in options[:2]],
                         "instruction": "The patient is a child, so these pediatric visits are the likely fit, not the adult "
                                        "ones the words also match. Ask a plain question to pick between them."}
-    hints = json.loads(ranking.cluster["member_hints"]) if ranking.cluster else {}
     first = list(ranking.candidates) if ranking.status in ("ask", "match") else []
-    order = first + [tid for tid, _, _ in ranking.ranked if tid not in first]
+    order = first + [tid for tid, _ in ranking.ranked if tid not in first]
     rows = await _type_rows(conn, ctx, order[:MAX_RESULTS])
-    options = [_type_option(ctx, rows[tid], hints.get(tid), patient) for tid in order[:MAX_RESULTS] if tid in rows]
+    options = [_type_option(ctx, rows[tid], patient) for tid in order[:MAX_RESULTS] if tid in rows]
     out = _bounded(options, total=len(ranking.ranked))
     if ranking.status in ("ask", "match") and all(not rows[c]["offered"] for c in ranking.candidates if c in rows):
         names = [rows[c]["name"] for c in ranking.candidates if c in rows]
@@ -244,14 +240,11 @@ async def search_appointment_types(args: dict, ctx: ToolContext, conn) -> dict:
         out = {"status": "match", **out, "instruction": "The first option is the match. Confirm it in plain words."}
     elif ranking.status == "ask":
         names = [rows[t]["name"] for t in ranking.candidates if t in rows]
-        default = ranking.cluster["safer_default"] if ranking.cluster else None
         out = {
             "status": "ask", **out, "choose_between": names,
-            "question": ranking.cluster["question"] if ranking.cluster else None,
-            "safer_default": rows[default]["name"] if default in rows else None,
-            "instruction": "These are easy to confuse. Ask the question (in the caller's words, not the catalog's) "
-                           "and let their answer pick, using pick_if_caller_wants. Do not choose for them. If they "
-                           "truly can't say, propose the safer_default and get a clear yes.",
+            "instruction": "These are easy to confuse. Ask a plain question that tells them apart (in the caller's "
+                           "words, not the catalog's) and let their answer pick. "
+                           "Do not choose for them.",
         }
     else:
         out = {"status": "unsure", **out,
@@ -689,7 +682,7 @@ TOOLS = {
             "search_appointment_types",
             "Match what the caller wants to the clinic's appointment types, using the caller's own words. Returns the "
             "best candidates with the facts that tell them apart; when two are easily confused it returns status 'ask' "
-            "with the question to put to the caller.",
+            "with the ones to ask the caller about.",
             {"query": {"type": "string", "description": "The caller's own words, e.g. 'skin check' or 'my knee hurts'."},
              "specialty": {"type": "string", "description": "Optional specialty filter."},
              "provider_id": {**_ID, "description": "Only types this provider can do."},

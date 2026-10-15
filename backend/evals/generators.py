@@ -4,7 +4,7 @@
 # oracle, the loader, the leak test and the judge treat them exactly like the
 # hand-written ones. Deterministic per catalog.
 #
-#   surname collisions, registered near-duplicate clusters, capability gates,
+#   surname collisions, capability gates,
 #   referral gates (incl. expired referrals), new-patient gates, multi-location
 #   providers, orphan types, closed days, proximity ties, places far from everything
 #
@@ -47,9 +47,7 @@ class _Gen:
         return {"name": f"{first} {last}", "dob": dob, "record": {"existing": existing, "referrals": list(referrals)}}
 
     def phrase(self, type_id: str) -> str:
-        name = self.types[type_id]["name"]
-        exact = [p for p, names in self.b.aliases.items() if [normalize(n) for n in names] == [normalize(name)]]
-        return exact[0] if exact else name.lower()
+        return self.types[type_id]["name"].lower()
 
     def place_of(self, loc_id: str) -> str:
         m = self.b.places.get(loc_id)
@@ -94,35 +92,6 @@ class _Gen:
                      {"outcome": "booking", "types": {"ideal": [t["name"]]},
                       "provider": {"name": normalize(p["name"].replace("Dr.", "")), "says": surname, "strict": True},
                       "near": self.place_of(loc)})
-
-    def clusters(self, k=4):
-        ids_by_name = self.b.type_ids_by_name()
-        offered = {t for _, _, t in self.structural}
-        usable = []
-        for c in self.b.clusters:
-            members = [m for m in c["members"] if any(i in offered for i in ids_by_name.get(normalize(m), []))]
-            if len(members) >= 2:
-                usable.append((c, members))
-        for c, members in self.rng.sample(usable, min(k, len(usable))):
-            target = self.rng.choice(members)
-            tid = ids_by_name[normalize(target)][0]
-            phrases = [p for p, names in self.b.aliases.items()
-                       if {normalize(n) for n in names} >= {normalize(m) for m in members}
-                       and normalize(target) not in p]
-            phrase = phrases[0] if phrases else members[0].split()[0].lower()
-            refs = [target] if self.types[tid]["requires_referral"] else []
-            ccall = self.caller(True, refs)
-            ccall.update({
-                "goal": f"Book a {phrase}. You know what you need when someone asks you about it."
-                        + (" You have a referral for it." if refs else ""),
-                "opening": f"Hi, I'm calling to book something, it's about {phrase}.",
-                "answers": {"what exactly you need": c["hints"].get(target, target)},
-            })
-            self.add("cluster", f"'{phrase}' lands on registered cluster {c['id']}; the caller means {target}.",
-                     ["cluster", f"cluster:{c['id']}"], ccall,
-                     {"outcome": "booking",
-                      "types": {"ideal": [target], "suboptimal": [m for m in members if m != target]},
-                      "must_ask": [f"cluster:{c['id']}"]})
 
     def capability_gates(self, k=2):
         found = []
@@ -277,7 +246,7 @@ class _Gen:
 
 def generate_personas(bundle: Bundle) -> list:
     g = _Gen(bundle)
-    for step in (g.clusters, g.surname_collisions, g.capability_gates, g.referral_gates, g.new_patient_gates,
+    for step in (g.surname_collisions, g.capability_gates, g.referral_gates, g.new_patient_gates,
                  g.multi_location, g.orphans, g.proximity, g.closed_days):
         step()
     # interleave kinds so a --max-generated cut keeps variety

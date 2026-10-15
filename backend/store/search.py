@@ -1,156 +1,114 @@
 #
-# Meaning layer for appointment types.
+# Meaning layer for appointment types: embeddings shortlist, the Decisions API picks.
 #
-# Three rankers run INSIDE an already-constrained candidate set and are fused with
-# reciprocal rank fusion:
-#   alias   - curated phrase table, exact and free
-#   text    - Postgres full-text over name + specialty + aliases
-#   vector  - pgvector cosine over embedded names and aliases
+#   1. Shortlist: the SHORTLIST candidate types whose embedded names are nearest the
+#      caller's words (pgvector cosine).
+#   2. Pick: one Decisions call asks which shortlisted type fits (or none), with a
+#      probability per type.
 #
-# The output is a ranking plus a verdict. A registered cluster or a near-tie means
-# "ask" (never argmax a near-tie); a weak best match means "unsure". Admissibility is
-# not decided here: the policy relation does that.
+# The output is a ranking plus a verdict. One clear pick means "match"; a pick spread
+# over a few types means "ask" between them (never argmax a coin flip), or "unsure".
+# Admissibility is not decided here: the policy relation does that.
 #
 
 from dataclasses import dataclass, field
 
 from loguru import logger
 
-from . import embeddings
+from . import decisions, embeddings
 from .bundle import normalize
 
-RRF_K = 60
-GAP_ASK = 0.04        # vector top1 - top2 below this, with no lexical evidence: ask
-ABSOLUTE_MIN = 0.35   # best vector similarity below this: unsure, whatever else matched
-STRONG = 0.55         # at or above this the vector alone is confident (measured)
+SHORTLIST = 10      # measured: the right type was in the top 10 for 66 of 67 lay phrases; 20 picked worse
+MAX_CHOICES = 254   # the API takes 255 choices; one is "none"
+MATCH_P = 0.6       # the pick's probability at or above this: match
+ASK_P = 0.15        # types at or above this are the ones to ask between
+OPEN_P = 0.02       # when the words fit several visits, types at or above this are the ones to ask between
+NONE = "none of these"
 
 
 @dataclass
 class TypeRanking:
     status: str                      # match | ask | unsure | none
-    ranked: list                     # [(type_id, fused score, {ranker: rank})]
-    cluster: dict = None             # the registered cluster driving an "ask"
+    ranked: list                     # [(type_id, probability)], most likely first
     candidates: list = field(default_factory=list)   # the ids the caller must choose among
-    similarity: dict = field(default_factory=dict)   # type_id -> best cosine
 
 
-async def _alias_hits(conn, cv: str, query: str, candidates: list) -> tuple:
-    """(type ids, matched phrases): alias phrases occurring in the query as whole words;
-    the longest phrase wins ("knee mri" beats "knee")."""
-    q = f" {normalize(query)} "
+async def _shortlist(conn, cv: str, query: str, candidates: list) -> list:
+    vec = (await embeddings.embed(conn, [normalize(query)]))[normalize(query)]
     rows = await conn.fetch(
-        "SELECT phrase, appointment_type_id FROM type_aliases WHERE catalog_version = $1 AND appointment_type_id = ANY($2)",
-        cv, candidates)
-    matched = {r["phrase"] for r in rows if f" {r['phrase']} " in q}
-    # "knee mri" beats "knee": drop phrases contained in a longer matched phrase
-    keep = {p for p in matched if not any(p != o and f" {p} " in f" {o} " for o in matched)}
-    return list(dict.fromkeys(r["appointment_type_id"] for r in rows if r["phrase"] in keep)), keep
-
-
-async def _name_hits(conn, cv: str, query: str, candidates: list, phrases: set) -> list:
-    """A type whose full name the caller actually said is a disambiguator, not a guess,
-    unless it is only part of a longer curated phrase ("ultrasound" in "heart ultrasound")."""
-    q = f" {normalize(query)} "
-    rows = await conn.fetch(
-        "SELECT id, name FROM appointment_types WHERE catalog_version = $1 AND id = ANY($2)", cv, candidates)
-    hits = []
-    for r in rows:
-        name = normalize(r["name"])
-        if f" {name} " in q and not any(name != p and f" {name} " in f" {p} " for p in phrases):
-            hits.append(r["id"])
-    return hits
-
-
-async def _text_ranking(conn, cv: str, query: str, candidates: list) -> list:
-    words = [w for w in normalize(query).split() if len(w) > 1]
-    if not words:
-        return []
-    rows = await conn.fetch(
-        """SELECT id, ts_rank_cd(search_doc, q) AS r
-           FROM appointment_types, to_tsquery('english', $3) q
-           WHERE catalog_version = $1 AND id = ANY($2) AND search_doc @@ q
-           ORDER BY r DESC, id LIMIT 10""",
-        cv, candidates, " | ".join(words))
+        """SELECT appointment_type_id AS id FROM type_embeddings
+           WHERE catalog_version = $1 AND appointment_type_id = ANY($2) AND model = $4
+           GROUP BY appointment_type_id ORDER BY min(embedding <=> $3), appointment_type_id LIMIT $5""",
+        cv, candidates, vec, embeddings.MODEL, SHORTLIST)
     return [r["id"] for r in rows]
 
 
-async def _vector_ranking(conn, cv: str, query: str, candidates: list) -> list:
-    vec = (await embeddings.embed(conn, [normalize(query)]))[normalize(query)]
-    rows = await conn.fetch(
-        """SELECT appointment_type_id AS id, max(1 - (embedding <=> $3)) AS sim
-           FROM type_embeddings
-           WHERE catalog_version = $1 AND appointment_type_id = ANY($2) AND model = $4
-           GROUP BY appointment_type_id ORDER BY sim DESC, id LIMIT 10""",
-        cv, candidates, vec, embeddings.MODEL)
-    return [(r["id"], float(r["sim"])) for r in rows]
+def _labels(types: dict, shortlist: list) -> dict:
+    """type_id -> the choice value the API sees: its name, plus the id if the name repeats."""
+    names = [types[t]["name"] for t in shortlist]
+    return {t: types[t]["name"] if names.count(types[t]["name"]) == 1 else f"{types[t]['name']} [{t}]" for t in shortlist}
 
 
-async def rank_types(conn, cv: str, query: str, candidates: list, use_vectors: bool = True) -> TypeRanking:
+def _questions(types: dict, shortlist: list) -> list:
+    labels = _labels(types, shortlist)
+    return [{
+        "type": "choice", "name": "visit",
+        "instructions": "Which of the clinic's appointment types would a scheduler book for what the caller said? "
+                        "Symptoms, body parts and lay words count: pick the visit that fits them. Pick 'none of "
+                        "these' only if the words say nothing about a medical need.",
+        "choices": [{"value": labels[t], "description": f"{types[t]['specialty']} visit, "
+                                                              f"{types[t]['duration_min']} min"} for t in shortlist]
+                   + [{"value": NONE, "description": "No clue to any medical need at all: a greeting, a name, "
+                                                     "a yes/no, or just 'an appointment'."}],
+    }, {
+        "type": "predicate", "name": "open",
+        "instructions": "The clinic books these visits: " + "; ".join(labels[t] for t in shortlist) + ". Do the "
+                        "caller's words fit two or more of them about equally well, so a scheduler would have to ask "
+                        "which one they mean before booking? (No if the words point to one visit, or to none.)",
+    }]
+
+
+async def rank_types(conn, cv: str, query: str, candidates: list) -> TypeRanking:
     if not candidates or not normalize(query):
         return TypeRanking("none", [])
-    alias, phrases = await _alias_hits(conn, cv, query, candidates)
-    named = await _name_hits(conn, cv, query, candidates, phrases)
-    text = await _text_ranking(conn, cv, query, candidates)
-    vector = []
-    if use_vectors:
-        try:
-            vector = await _vector_ranking(conn, cv, query, candidates)
-        except Exception as e:  # degradation ladder: lexical only, and say so
-            logger.warning(f"vector ranking unavailable, lexical only: {type(e).__name__}: {e}")
-            vector = []
-    sims = dict(vector)
+    types = {r["id"]: dict(r) for r in await conn.fetch(
+        "SELECT id, name, specialty, duration_min FROM appointment_types WHERE catalog_version = $1 AND id = ANY($2)",
+        cv, candidates)}
+    try:
+        shortlist = await _shortlist(conn, cv, query, candidates)
+    except Exception as e:  # degradation ladder: let the Decisions API choose among every candidate
+        logger.warning(f"embedding shortlist unavailable, offering all candidates: {type(e).__name__}: {e}")
+        shortlist = sorted(types)[:MAX_CHOICES]
+    if not shortlist:
+        return TypeRanking("none", [])
 
-    scores: dict = {}
-    ranks: dict = {}
-    for ranker, ids in (("name", named), ("alias", alias), ("text", text), ("vector", [i for i, _ in vector])):
-        for pos, tid in enumerate(ids):
-            # name and alias hits are unordered sets: every member ties at rank 1
-            rank = 1 if ranker in ("name", "alias") else pos + 1
-            scores[tid] = scores.get(tid, 0.0) + 1.0 / (RRF_K + rank)
-            ranks.setdefault(tid, {})[ranker] = rank
-    ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
-    ranked = [(tid, s, ranks[tid]) for tid, s in ranked]
-    if not ranked:
-        return TypeRanking("none", [], similarity=sims)
+    try:
+        answers = await decisions.decide(f'A caller to a medical clinic said: "{query}"',
+                                         _questions(types, shortlist))
+    except Exception as e:  # degradation ladder: the agent asks the caller instead of guessing
+        logger.warning(f"Decisions API unavailable, type search unsure: {type(e).__name__}: {e}")
+        return TypeRanking("unsure", [(t, 0.0) for t in shortlist], candidates=shortlist[:3])
 
-    clusters = await conn.fetch(
-        "SELECT id, members, question, member_hints, safer_default FROM ambiguity_clusters WHERE catalog_version = $1", cv)
-
-    def cluster_of(ids: set):
-        for c in clusters:
-            members = set(c["members"]) & set(candidates)
-            if len(ids & members) >= 2:
-                return c, [m for m in c["members"] if m in members]
-        return None, []
-
-    # 1. The caller said a type's exact name: that is their choice.
-    if len(named) == 1:
-        return TypeRanking("match", ranked, candidates=named, similarity=sims)
-
-    # 2. Curated phrasing pointing at several types: registered ambiguity, ask.
-    if len(alias) > 1:
-        c, members = cluster_of(set(alias))
-        return TypeRanking("ask", ranked, cluster=dict(c) if c else None,
-                           candidates=members if c else alias, similarity=sims)
-    if len(alias) == 1:
-        return TypeRanking("match", ranked, candidates=alias, similarity=sims)
-
-    # 3. No curated phrase: look at the fused ranking.
-    top = [tid for tid, _, _ in ranked[:3]]
-    best = vector[0][1] if vector else None
-    gap = vector[0][1] - vector[1][1] if len(vector) > 1 else 1.0
-    if best is not None and best < STRONG:
-        # Measured: junk ("hello", "an appointment") and real lay phrasing ("sore throat and
-        # ears") both score ~0.40-0.50, so absolute similarity alone can't tell them apart.
-        # Lexical support plus a clear gap can; without both, don't pretend to know.
-        if not text or gap < GAP_ASK or best < ABSOLUTE_MIN:
-            return TypeRanking("unsure", ranked, candidates=top, similarity=sims)
-    # a registered cluster fires only when one ranker on its own puts two members on top
-    for ids in ([i for i, _ in vector[:2]], text[:2]):
-        c, members = cluster_of(set(ids)) if len(ids) == 2 else (None, [])
-        if c:
-            return TypeRanking("ask", ranked, cluster=dict(c), candidates=members, similarity=sims)
-    if best is not None and gap < GAP_ASK and not text:
-        near = [tid for tid, s in vector if vector[0][1] - s < GAP_ASK][:3]
-        return TypeRanking("ask", ranked, candidates=near, similarity=sims)
-    return TypeRanking("match", ranked, candidates=[ranked[0][0]], similarity=sims)
+    visit = answers["visit"]
+    if visit["type"] == "refusal":
+        return TypeRanking("unsure", [(t, 0.0) for t in shortlist], candidates=shortlist[:3])
+    by_name = {label: t for t, label in _labels(types, shortlist).items()}
+    probs = {p["value"]: p["probability"] for p in visit["probabilities"]}
+    ranked = sorted(((by_name[n], p) for n, p in probs.items() if n in by_name), key=lambda x: (-x[1], x[0]))
+    p_top = ranked[0][1] if ranked else 0.0
+    # 0. The words fit several visits about equally: ask among the likeliest.
+    if answers["open"].get("probability", 0) >= 0.5:
+        near = [t for t, p in ranked if p >= OPEN_P][:3]
+        if len(near) >= 2:
+            return TypeRanking("ask", ranked, candidates=near)
+    # 1. One clear pick.
+    if visit["choice"] != NONE and p_top >= MATCH_P:
+        return TypeRanking("match", ranked, candidates=[ranked[0][0]])
+    # 2. Spread over a few types that carry most of what the types got: ask between them.
+    #    This holds even when "none" won: "an MRI" fits every MRI, so no single type wins.
+    near = [t for t, p in ranked if p >= ASK_P][:3]
+    if len(near) >= 2 and sum(p for _, p in ranked[:len(near)]) >= MATCH_P * sum(p for _, p in ranked):
+        return TypeRanking("ask", ranked, candidates=near)
+    if visit["choice"] == NONE:
+        return TypeRanking("none", ranked)
+    return TypeRanking("unsure", ranked, candidates=[t for t, _ in ranked[:3]])

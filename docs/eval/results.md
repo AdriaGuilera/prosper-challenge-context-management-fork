@@ -175,6 +175,39 @@ Offline, with no LLM: 40 lay phrases ("my heart keeps racing", "I have the flu, 
 
 A live ablation (`--no-vectors`, gpt-4o-mini, given catalog) is in `20261007-010058-ablation-novectors`; see § Stage 4.
 
+## The meaning layer, rebuilt: embeddings + Decisions API, no lexicon (2026-10-15)
+
+The alias table, full-text search, the hand-written look-alike groups (`ambiguity_clusters`) and every `lexicon.json` are gone.
+Type search is now two steps (`store/search.py`):
+
+1. Embeddings shortlist the 10 types whose names are nearest the caller's words.
+2. One OpenAI Decisions API call picks among them, giving a probability per type, plus a yes/no on "do the words fit several of these about equally?".
+
+The same 40 phrases, the 32 held-out ones written before any tuning, and 16 vague phrases where the agent must ask (one per deleted group) were run against the `given` catalog, 3 runs each:
+
+| | right | unsure | wrong | asks on a phrase with one right answer | must-ask phrases that ask |
+|---|---|---|---|---|---|
+| old ranker (alias + full text + vectors) | 29/40 · 19/32 | 9 · 7 | 2 · 6 | – | (groups) |
+| embeddings + Decisions, no groups, no vagueness check | 39/40 · 32/32 | 0 · 0 | 1 · 0 | 0 | 0/16 |
+| embeddings + Decisions, no groups, vagueness check (kept) | 39/40 · 32/32 | 0 · 0 | 1 · 0 | 0 | 7/16, same in all 3 runs |
+
+- **Without any check, the Decisions API never asks.** It is confident: "I want my skin checked" goes to Full Body Skin Exam at 0.96, and "I need to schedule an MRI" comes back as *none*.
+- **The vagueness question has to see the visit names.** Each Decisions question is answered on its own, so the check lists the shortlist itself. Without the names it never said yes.
+- **What still books without asking:**
+  - "I need a blood test" → Blood Draw (no fasting question);
+  - "I need to see the dentist" → Dental Exam;
+  - "I need a vaccine" → Vaccination / Immunization;
+  - "I'm sick" → Sick Visit;
+  - "I need an eye exam" → Eye Exam;
+  - "checkup for my baby" → Well-Child Visit.
+
+  Most of these are defensible picks. The groups used to force a question on every one of them.
+- **Live smoke** (`20261015-213420-nogroups-smoke`, gpt-4o-mini, N=2, the 3 hand-written look-alike personas): 4/8 pass.
+  - Skin check passed 3/4: both cooperative runs and one vague run; the other vague run failed only because the agent read a confirmation code that wasn't in BOOKINGS.
+  - Annual passed 1/2: the other run booked Annual Physical without asking.
+  - MRI failed 2/2. Search did ask, but the caller only has a referral for MRI - Spine, so the agent offered that one and confirmed it rather than naming brain/spine/knee.
+- Generated personas no longer include the look-alike ("cluster") scenarios, because they were built from the groups. Hand-written personas state the visits to ask between directly: `"must_ask": ["visit:MRI - Brain|MRI - Spine|MRI - Knee"]`.
+
 ## How the approach changed because of the eval
 
 Each change below was driven by a failing conversation, and each moved a number.
@@ -410,8 +443,6 @@ removed along with the rest of `backend/tests` in `b508754`.)
 - **A single simulator model** (gpt-4o) plays every caller. A different simulator would shift absolute numbers. Comparisons across agent models and systems are fair because it is held fixed.
 - **Small N.** N=2 on the given catalog and N=1 on the variants. A case at 1/2 is a finding, not a rate. The per-case tables in each run's summary.md show the distribution.
 - **Self-authored data.** The generated catalogs reuse the given catalog's vocabulary plus 40 synthetic types.
-  Each bundle layers its own `lexicon.json` over the shared base: hand-authored for gen-large and adv-near-dupes,
-  and for all of them aliases derived mechanically from their own type names ("EKG / Electrocardiogram" → "ekg").
-  The derived aliases were added after stages 1–4 ran, so those runs used base + hand-authored lexicons only.
-  The lexicon was not tuned per variant from failures; that is deliberate, since the variants test transfer.
+  Until 2026-10-15 each bundle layered its own `lexicon.json` over a shared base; stages 1–4 ran with those lexicons.
+  They were not tuned per variant from failures; that is deliberate, since the variants test transfer. The lexicons are now deleted.
 - **Grading tolerance.** "Soonest" is graded with 2 days of tolerance for acceptable. Ties in proximity accept either location.

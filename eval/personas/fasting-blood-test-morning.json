@@ -2,7 +2,7 @@
   "id": "fasting-blood-test-morning",
   "description": "Volunteers the disambiguator (fasting); wants a morning slot.",
   "tags": [
-    "cluster",
+    "lookalike",
     "time:part-of-day"
   ],
   "behaviors": [

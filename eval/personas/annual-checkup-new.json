@@ -2,7 +2,7 @@
   "id": "annual-checkup-new",
   "description": "New patient asks for an annual checkup; physical vs wellness is unqueryable.",
   "tags": [
-    "cluster",
+    "lookalike",
     "gate:new-patient"
   ],
   "behaviors": [
@@ -34,7 +34,7 @@
       ]
     },
     "must_ask": [
-      "cluster:annual"
+      "visit:Annual Physical|Annual Wellness Visit"
     ],
     "time": "soonest"
   }

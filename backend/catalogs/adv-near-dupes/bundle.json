@@ -1,10 +1,6 @@
 {
  "name": "adv-near-dupes",
  "catalog": "catalog.json",
- "lexicon": [
-  "../lexicon.base.json",
-  "lexicon.json"
- ],
  "places": "places.json",
  "patients": "patients.json",
  "calendar": {

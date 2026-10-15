@@ -3,7 +3,7 @@
   "description": "Sick visit from a place exactly equidistant between two clinics.",
   "tags": [
     "proximity:tie",
-    "cluster"
+    "lookalike"
   ],
   "behaviors": [
     "cooperative"

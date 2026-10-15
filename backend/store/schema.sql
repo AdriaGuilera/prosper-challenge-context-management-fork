@@ -103,10 +103,9 @@ CREATE TABLE IF NOT EXISTS appointment_types (
     requires_referral    boolean NOT NULL,
     new_patients_allowed boolean NOT NULL,
     required_capability  text,                  -- absent on most types: NULL, never ''
-    search_doc           tsvector,              -- name (A) + specialty (B); aliases have their own ranker
     PRIMARY KEY (catalog_version, id)
 );
-CREATE INDEX IF NOT EXISTS appointment_types_fts ON appointment_types USING gin (search_doc);
+ALTER TABLE appointment_types DROP COLUMN IF EXISTS search_doc;   -- older databases: full-text search is gone
 
 CREATE TABLE IF NOT EXISTS provider_appointment_types (
     catalog_version     text NOT NULL,
@@ -118,36 +117,27 @@ CREATE INDEX IF NOT EXISTS pat_type ON provider_appointment_types (catalog_versi
 
 -- ---- meaning layer -----------------------------------------------------------
 
--- Curated caller phrasing -> candidate types. Exact, free, offline.
-CREATE TABLE IF NOT EXISTS type_aliases (
-    catalog_version     text NOT NULL,
-    phrase              text NOT NULL,          -- normalised: lowercase, single spaces
-    appointment_type_id text NOT NULL,
-    PRIMARY KEY (catalog_version, phrase, appointment_type_id)
-);
+-- older databases: the curated alias ranker and the look-alike groups are gone
+DROP TABLE IF EXISTS type_aliases;
+DROP TABLE IF EXISTS ambiguity_clusters;
 
--- Registered ambiguity: members a score alone must never pick between.
-CREATE TABLE IF NOT EXISTS ambiguity_clusters (
-    catalog_version text NOT NULL,
-    id              text NOT NULL,
-    members         text[] NOT NULL,
-    question        text NOT NULL,              -- in the caller's words
-    member_hints    jsonb NOT NULL,             -- type_id -> how a caller would describe it
-    safer_default   text,                       -- NULL: no safe default, the caller must choose
-    PRIMARY KEY (catalog_version, id)
-);
-
--- Embeddings of type names and their aliases, tagged with the model that made them.
+-- Embeddings of type names, tagged with the model that made them. Older databases also
+-- embedded alias phrases (a `source` column): drop and rebuild, re-ingest refills it from
+-- embedding_cache without new API calls.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'type_embeddings' AND column_name = 'source') THEN
+        DROP TABLE type_embeddings;
+    END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS type_embeddings (
     catalog_version     text NOT NULL,
     appointment_type_id text NOT NULL,
-    source              text NOT NULL,          -- 'name' | 'alias'
     text                text NOT NULL,
     model               text NOT NULL,
     embedding           vector(1536) NOT NULL,
-    PRIMARY KEY (catalog_version, appointment_type_id, source, text, model)
+    PRIMARY KEY (catalog_version, appointment_type_id, text, model)
 );
-ALTER TABLE type_embeddings DROP COLUMN IF EXISTS model_version;   -- older databases
 
 -- ---- patient state (mocked registry) -----------------------------------------
 

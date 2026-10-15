@@ -1,8 +1,8 @@
 {
   "id": "mri-back",
-  "description": "'An MRI' without saying which part; registered cluster with no safe default.",
+  "description": "'An MRI' without saying which part; it fits every MRI, so the agent must ask which one.",
   "tags": [
-    "cluster",
+    "lookalike",
     "gate:capability"
   ],
   "behaviors": [
@@ -31,7 +31,7 @@
       ]
     },
     "must_ask": [
-      "cluster:mri"
+      "visit:MRI - Brain|MRI - Spine|MRI - Knee"
     ],
     "time": "any"
   }

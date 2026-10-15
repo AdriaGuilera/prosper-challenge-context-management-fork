@@ -234,17 +234,16 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
         if o.outcome == "booking":
             o.target = _target(bundle, options, o, soonest_matters)
 
-    # registered-cluster asks only apply where the cluster exists among offered types
+    # "visit:A|B": the caller's words fit several visits, so the agent must ask which one;
+    # only where at least two of them are offered here
     for ask in exp.get("must_ask", []):
-        if ask.startswith("cluster:"):
-            cid = ask.split(":", 1)[1]
-            c = next((c for c in bundle.clusters if c["id"] == cid), None)
-            if c:
-                members = {i for m in c["members"] for i in ids_by_name.get(normalize(m), [])}
-                offered = {tr[2] for tr in structural}
-                if len(members & offered) >= 2 and o.outcome == "booking":
-                    o.must_ask.append(ask)
-                    o.ask_labels[ask] = [m.lower() for m in c["members"]] + [h.lower() for h in c["hints"].values()]
+        if ask.startswith("visit:"):
+            names = ask.split(":", 1)[1].split("|")
+            members = {i for n in names for i in ids_by_name.get(normalize(n), [])}
+            offered = {tr[2] for tr in structural}
+            if len(members & offered) >= 2 and o.outcome == "booking":
+                o.must_ask.append(ask)
+                o.ask_labels[ask] = [n.lower() for n in names]
         elif ask == "place":
             o.must_ask.append(ask)
             o.ask_labels[ask] = sorted({p["name"].lower() for p in bundle.gazetteer["places"] if p["kind"] != "street"}

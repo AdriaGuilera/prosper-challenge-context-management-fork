@@ -11,7 +11,6 @@
 
 import argparse
 import asyncio
-import json
 from collections import Counter
 import sys
 from datetime import date, datetime, timedelta
@@ -29,8 +28,8 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
 STRUCTURAL = [
     "locations", "location_capabilities", "location_hours", "providers", "provider_languages",
-    "provider_locations", "appointment_types", "provider_appointment_types", "type_aliases",
-    "ambiguity_clusters", "type_embeddings", "patients", "referrals", "schedules", "appointments",
+    "provider_locations", "appointment_types", "provider_appointment_types",
+    "type_embeddings", "patients", "referrals", "schedules", "appointments",
 ]
 
 
@@ -41,14 +40,8 @@ def search_name(name: str) -> str:
 
 
 def embed_texts(bundle: Bundle) -> list:
-    """(type_id, source, text) rows: every type name, plus every alias phrase per type."""
-    ids_by_name = bundle.type_ids_by_name()
-    rows = [(t["id"], "name", t["name"]) for t in bundle.catalog["appointment_types"]]
-    for phrase, names in bundle.aliases.items():
-        for n in names:
-            for tid in ids_by_name.get(normalize(n), []):
-                rows.append((tid, "alias", phrase))
-    return rows
+    """(type_id, text) rows: every type name. The type search shortlists on these."""
+    return [(t["id"], t["name"]) for t in bundle.catalog["appointment_types"]]
 
 
 def check(bundle: Bundle) -> None:
@@ -134,42 +127,19 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
             [(cv, p["id"], tid) for p in cat["providers"] for tid in p["appointment_type_ids"]])
 
         # ---- types + meaning layer ---------------------------------------------------
-        alias_rows = sorted({
-            (cv, phrase, tid)
-            for phrase, names in bundle.aliases.items()
-            for n in names for tid in ids_by_name.get(normalize(n), [])
-        })
-        aliases_by_type: dict = {}
-        for _, phrase, tid in alias_rows:
-            aliases_by_type.setdefault(tid, []).append(phrase)
         await conn.executemany(
-            """INSERT INTO appointment_types VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
-                 setweight(to_tsvector('english', $3), 'A') ||
-                 setweight(to_tsvector('english', $4), 'B'))""",
+            "INSERT INTO appointment_types VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
             [(cv, t["id"], t["name"], t["specialty"], t["duration_min"], t["requires_referral"],
               t["new_patients_allowed"], t.get("required_capability") or None)
              for t in cat["appointment_types"]])
-        await conn.executemany("INSERT INTO type_aliases VALUES ($1,$2,$3)", alias_rows)
 
-        cluster_rows = []
-        for c in bundle.clusters:
-            members = [i for m in c["members"] for i in ids_by_name.get(normalize(m), [])]
-            if len(members) < 2:
-                continue  # the cluster does not exist in this catalog
-            hints = {i: c["hints"][m] for m in c["members"] for i in ids_by_name.get(normalize(m), []) if m in c["hints"]}
-            default = ids_by_name.get(normalize(c["safer_default"] or ""), [None])[0]
-            if default not in members:
-                default = None
-            cluster_rows.append((cv, c["id"], members, c["question"], json.dumps(hints), default))
-        await conn.executemany("INSERT INTO ambiguity_clusters VALUES ($1,$2,$3,$4,$5::jsonb,$6)", cluster_rows)
 
         if embed:
             texts = embed_texts(bundle)
-            vectors = await embeddings.embed(conn, [t for _, _, t in texts])
+            vectors = await embeddings.embed(conn, [t for _, t in texts])
             await conn.executemany(
-                "INSERT INTO type_embeddings VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
-                [(cv, tid, src, text, embeddings.MODEL, vectors[text])
-                 for tid, src, text in texts])
+                "INSERT INTO type_embeddings VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+                [(cv, tid, text, embeddings.MODEL, vectors[text]) for tid, text in texts])
 
         # ---- patients --------------------------------------------------------------
         await conn.executemany(
@@ -195,8 +165,8 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
 
         stats = {
             "locations": len(cat["locations"]), "providers": len(cat["providers"]),
-            "appointment_types": len(cat["appointment_types"]), "aliases": len(alias_rows),
-            "clusters": len(cluster_rows), "schedules": len(schedules), "prebooked": len(prebooked),
+            "appointment_types": len(cat["appointment_types"]),
+            "schedules": len(schedules), "prebooked": len(prebooked),
             "embedded_texts": len(embed_texts(bundle)) if embed else 0,
         }
         await conn.execute(
