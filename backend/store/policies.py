@@ -106,10 +106,6 @@ class Policy:
     on: str                             # "catalog" | "patient" | "conversation": what else it reads
     explain: Callable                   # (facts, candidate) -> the reason, in words a caller can hear
 
-    @property
-    def text(self) -> str:
-        return self.check.__doc__.split(". ", 1)[1].strip()
-
 
 POLICIES = [
     Policy("1", "provider_not_at_location", provider_works_at_location, ("provider_id", "location_id"), "catalog",
@@ -139,19 +135,15 @@ class Violation:
 
 
 class PolicySet:
-    """Runs a set of policies over candidates. Build one per catalog; pass `only` to run a subset."""
+    """Runs every policy over candidates. Build one per catalog."""
 
-    def __init__(self, catalog: dict, policies: list = None, only: Optional[set] = None):
+    def __init__(self, catalog: dict):
         self.facts = Facts(catalog)
-        chosen = policies if policies is not None else POLICIES
-        self.policies = [p for p in chosen if only is None or p.number in only]
+        self.policies = POLICIES
         self._structural = [p for p in self.policies if p.on == "catalog"]
 
     def __repr__(self) -> str:
         return f"PolicySet({', '.join(p.number for p in self.policies)})"
-
-    def by_number(self, number: str) -> Policy:
-        return next(p for p in self.policies if p.number == number)
 
     # -- checking ---------------------------------------------------------------------------
 
@@ -243,10 +235,6 @@ def policy_set(catalog: dict) -> PolicySet:
     return _SETS[key][1]
 
 
-def raw_triples(catalog: dict) -> list:
-    return policy_set(catalog).raw_triples()
-
-
 def triple_problems(catalog: dict, provider_id: str, location_id: str, type_id: str,
                     patient: Optional[PatientState] = None) -> list:
     """Every policy the triple breaks, as machine-readable codes. Empty means bookable."""
@@ -255,29 +243,3 @@ def triple_problems(catalog: dict, provider_id: str, location_id: str, type_id: 
 
 def valid_triples(catalog: dict, patient: Optional[PatientState] = None) -> set:
     return policy_set(catalog).triples(patient)
-
-
-def multi_location_problem(catalog: dict, provider_id: str, location_id: Optional[str],
-                           offered_locations: set) -> Optional[str]:
-    """Policy 6 alone, for one provider."""
-    ps = policy_set(catalog)
-    if provider_id not in ps.facts.providers:
-        return "unknown_entity"
-    if not location_id:
-        return "location_not_disambiguated" if len(ps.facts.providers[provider_id]["location_ids"]) > 1 else None
-    conv = Conversation({provider_id: set(offered_locations)})
-    v = [x for x in ps.violations(Candidate(provider_id, location_id), None, conv) if x.policy == "6"]
-    return v[0].code if v else None
-
-
-def orphan_types(catalog: dict) -> list:
-    """Types no provider offers at all."""
-    offered = {t for p in catalog["providers"] for t in p["appointment_type_ids"]}
-    return [t["id"] for t in catalog["appointment_types"] if t["id"] not in offered]
-
-
-def unbookable_types(catalog: dict) -> list:
-    """Types offered by someone but bookable nowhere (e.g. the capability is missing everywhere)."""
-    offered = {t for p in catalog["providers"] for t in p["appointment_type_ids"]}
-    ok = {t for _, _, t in valid_triples(catalog)}
-    return [t for t in offered if t not in ok]
