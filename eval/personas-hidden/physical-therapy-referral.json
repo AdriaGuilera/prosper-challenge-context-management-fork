@@ -1,6 +1,6 @@
 {
   "id": "physical-therapy-referral",
-  "description": "New patient with a PT referral seeks care close to Mission.",
+  "description": "New patient with referral seeks physical therapy after a shoulder injury.",
   "tags": [
     "booking",
     "physical-therapy",
@@ -10,21 +10,22 @@
     "cooperative"
   ],
   "caller": {
-    "name": "Damon Riley",
-    "dob": "1989-02-28",
+    "name": "Cameron Ellis",
+    "dob": "1990-04-11",
     "record": {
       "existing": false,
       "referrals": [
         "Physical Therapy Evaluation"
       ]
     },
-    "goal": "Start therapy for my sore shoulder after a bike crash.",
-    "opening": "My orthopedist sent over a therapy referral for my shoulder.",
+    "goal": "Get you started with therapy for my injured shoulder.",
+    "opening": "I strained my shoulder lifting boxes, and the urgent care doctor referred me for physical therapy.",
     "answers": {
-      "Is this your first physical therapy visit here?": "Yes, and the referral should have been faxed today."
+      "referral": "Yes, it says physical therapy evaluation."
     },
     "preferences": {
-      "location": "Mission District"
+      "location": "near Mission District",
+      "time": "morning"
     }
   },
   "expect": {
@@ -37,8 +38,7 @@
       "suboptimal": []
     },
     "near": "Mission District",
-    "time": "soonest",
-    "on_or_after": "2026-10-15"
+    "part_of_day": "morning"
   },
   "source": "hidden"
 }

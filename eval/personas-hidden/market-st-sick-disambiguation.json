@@ -1,0 +1,45 @@
+{
+  "id": "market-st-sick-disambiguation",
+  "description": "Caller names a street crossing several areas and needs location clarification.",
+  "tags": [
+    "booking",
+    "must-ask",
+    "location"
+  ],
+  "behaviors": [
+    "vague"
+  ],
+  "caller": {
+    "name": "Peter Wong",
+    "dob": "1977-03-29",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Get you seen for a sore throat somewhere on Market Street.",
+    "opening": "I've got a terrible sore throat; do you have anything on Market Street?",
+    "answers": {
+      "symptoms": "Sore throat for three days, no trouble breathing."
+    },
+    "preferences": {
+      "location": "Market St",
+      "time": "soonest"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Sick Visit",
+        "Urgent Care Visit"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "time": "soonest",
+    "must_ask": [
+      "place"
+    ]
+  },
+  "source": "hidden"
+}

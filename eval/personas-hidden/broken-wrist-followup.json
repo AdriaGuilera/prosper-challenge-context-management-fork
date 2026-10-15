@@ -1,0 +1,42 @@
+{
+  "id": "broken-wrist-followup",
+  "description": "Established patient needs orthopedic fracture follow-up.",
+  "tags": [
+    "booking",
+    "orthopedics",
+    "follow-up"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Noah Feldman",
+    "dob": "1978-05-27",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Book you a recheck for my wrist after the cast came off.",
+    "opening": "I broke my wrist six weeks ago and the ER said I need an orthopedic follow-up.",
+    "answers": {
+      "injury": "It's my left wrist, already in a cast and healing."
+    },
+    "preferences": {
+      "location": "near Richmond",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Fracture Follow-up"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Richmond",
+    "part_of_day": "morning"
+  },
+  "source": "hidden"
+}

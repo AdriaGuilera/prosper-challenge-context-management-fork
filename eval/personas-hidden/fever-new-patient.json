@@ -1,0 +1,43 @@
+{
+  "id": "fever-new-patient",
+  "description": "New adult with flu-like symptoms seeks a same-day visit.",
+  "tags": [
+    "booking",
+    "new-patient",
+    "acute"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Maya Brooks",
+    "dob": "1993-04-18",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Help you get seen as soon as possible for a fever and bad cough.",
+    "opening": "I've had a fever since last night and my cough is getting worse; can I come in today?",
+    "answers": {
+      "symptoms": "Fever around 101, cough, aches, but I can breathe okay."
+    },
+    "preferences": {
+      "time": "as soon as possible",
+      "location": "near Downtown"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Urgent Care Visit",
+        "Sick Visit"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Downtown",
+    "time": "soonest"
+  },
+  "source": "hidden"
+}

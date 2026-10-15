@@ -1,0 +1,35 @@
+{
+  "id": "allergists-count",
+  "description": "Caller asks the number of allergy specialists without seeking an appointment.",
+  "tags": [
+    "information",
+    "provider-count",
+    "allergy"
+  ],
+  "behaviors": [
+    "rambler"
+  ],
+  "caller": {
+    "name": "Felicia Grant",
+    "dob": "1976-08-24",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Tell you how many allergy doctors work there.",
+    "opening": "I'm comparing clinics for my allergies, so how many allergy specialists do you have?",
+    "answers": {},
+    "preferences": {}
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "count_providers": {
+          "specialty": "Allergy/Immunology"
+        }
+      }
+    ]
+  },
+  "source": "hidden"
+}

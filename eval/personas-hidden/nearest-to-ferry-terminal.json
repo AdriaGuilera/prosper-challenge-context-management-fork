@@ -1,0 +1,34 @@
+{
+  "id": "nearest-to-ferry-terminal",
+  "description": "Caller asks which clinic location is nearest the Ferry Terminal.",
+  "tags": [
+    "information",
+    "nearest-location"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Jonathan Kerr",
+    "dob": "1986-06-01",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Tell you which of your offices is closest to the Ferry Terminal.",
+    "opening": "Which clinic is nearest the Ferry Terminal?",
+    "answers": {},
+    "preferences": {
+      "location": "Ferry Terminal"
+    }
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "nearest_to": "Ferry Terminal"
+      }
+    ]
+  },
+  "source": "hidden"
+}

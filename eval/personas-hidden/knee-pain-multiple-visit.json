@@ -1,0 +1,47 @@
+{
+  "id": "knee-pain-multiple-visit",
+  "description": "New patient with knee pain needs clarification between evaluation and imaging.",
+  "tags": [
+    "booking",
+    "must-ask",
+    "orthopedics"
+  ],
+  "behaviors": [
+    "vague"
+  ],
+  "caller": {
+    "name": "Lorenzo Diaz",
+    "dob": "1968-10-05",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Orthopedic Consultation",
+        "MRI - Knee"
+      ]
+    },
+    "goal": "Help you figure out what to book for my swollen knee.",
+    "opening": "My knee has been swelling and my doctor mentioned an MRI and an orthopedic person.",
+    "answers": {
+      "referral": "Yes, the referral has both an ortho consult and a knee MRI listed."
+    },
+    "preferences": {
+      "location": "near Midtown"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Orthopedic Consultation",
+        "MRI - Knee"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Midtown",
+    "must_ask": [
+      "visit:Orthopedic Consultation|MRI - Knee"
+    ]
+  },
+  "source": "hidden"
+}

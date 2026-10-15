@@ -1,0 +1,48 @@
+{
+  "id": "obgyn-named-not-accepting",
+  "description": "New patient insists on an OB/GYN physician who is not accepting new patients.",
+  "tags": [
+    "no-booking",
+    "provider",
+    "new-patient"
+  ],
+  "behaviors": [
+    "adversarial"
+  ],
+  "caller": {
+    "name": "Nisha Kapoor",
+    "dob": "1989-02-03",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Book you with Dr. Linda Nguyen for a routine women's exam.",
+    "opening": "My sister sees Dr. Linda Nguyen and I only want her for my annual gynecology visit.",
+    "answers": {
+      "patient-status": "I'm new to your practice."
+    },
+    "preferences": {
+      "doctor": "Dr. Linda Nguyen",
+      "location": "near Downtown"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Annual Well-Woman Exam"
+      ],
+      "acceptable": [
+        "OB/GYN New Patient Visit"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Linda Nguyen",
+      "says": "Dr. Linda Nguyen",
+      "strict": true
+    },
+    "near": "Downtown"
+  },
+  "source": "hidden"
+}

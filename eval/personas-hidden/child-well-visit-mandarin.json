@@ -1,0 +1,48 @@
+{
+  "id": "child-well-visit-mandarin",
+  "description": "Parent requests routine pediatric care with a Mandarin-speaking clinician.",
+  "tags": [
+    "booking",
+    "pediatrics",
+    "language"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Jun Li",
+    "dob": "2019-09-02",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Help you schedule my son's regular checkup with someone who speaks Mandarin.",
+    "opening": "My little boy needs his yearly checkup, and Mandarin would make it easier for our family.",
+    "answers": {
+      "patient": "My son, Jun, is seven and he's not sick."
+    },
+    "preferences": {
+      "language": "Mandarin",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Well-Child Visit"
+      ],
+      "acceptable": [
+        "Annual Physical"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "specialty": "Pediatrics",
+      "language": "Mandarin",
+      "strict": true
+    },
+    "part_of_day": "morning"
+  },
+  "source": "hidden"
+}

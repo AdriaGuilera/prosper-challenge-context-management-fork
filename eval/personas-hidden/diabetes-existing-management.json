@@ -1,0 +1,46 @@
+{
+  "id": "diabetes-existing-management",
+  "description": "Established endocrinology patient seeks ongoing diabetes management.",
+  "tags": [
+    "booking",
+    "endocrinology",
+    "existing"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Marvin Reed",
+    "dob": "1958-05-12",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Book you a follow-up for my diabetes numbers and medications.",
+    "opening": "My blood sugars have been running high and I need to see Dr. Samuel Kim again.",
+    "answers": {
+      "history": "I'm already a patient of Dr. Kim for diabetes."
+    },
+    "preferences": {
+      "doctor": "Dr. Samuel Kim",
+      "location": "near Downtown"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Diabetes Management"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Samuel Kim",
+      "says": "Dr. Samuel Kim",
+      "strict": true
+    },
+    "near": "Downtown"
+  },
+  "source": "hidden"
+}

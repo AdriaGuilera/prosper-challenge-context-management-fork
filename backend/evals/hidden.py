@@ -52,14 +52,16 @@ FORMAT = """Each caller is one JSON object:
     "near": "<a place name from PLACES>",
     "time": "soonest" | "any",
     "part_of_day": "morning" | "afternoon",
-    "on_or_after": "YYYY-MM-DD",
     "must_ask": ["place"] or ["visit:<name>|<name>"],
     "info": [{"count_providers": {"specialty": "<exact>"}} | {"any_provider": {"specialty": "<exact>", "language": "<exact>"}}
              | {"open_on": "<Weekday>"} | {"location_open_on": {"location": "<exact>", "day": "<Weekday>"}}
              | {"nearest_to": "<place from PLACES>"}]
   }
 }
-Only "outcome" is required in expect; include the other keys only when the caller's request implies them.
+Only "outcome" is required in expect. Every other key in expect must come from something the caller states in
+"goal", "opening", "preferences" or "answers": a provider only if the caller names them (or asks for a specialty or
+language), "near" only if the caller names that place, "part_of_day" only if the caller says morning or afternoon.
+The caller can't be graded on what they never say. Callers who want "as soon as possible" use "time": "soonest".
 - types: every visit that would meet the caller's need, by how well (ideal > acceptable > suboptimal). If two visits
   both meet it, list both. Omit for "information".
 - "record.existing": false makes them a new patient; the clinic's new-patient rules then apply.
@@ -74,7 +76,7 @@ Only "outcome" is required in expect; include the other keys only when the calle
 INSTRUCTIONS = """You write test callers for a phone scheduling assistant of a medical clinic. Below are the clinic's
 CATALOG (visit types, providers, locations), its booking POLICIES, the PLACES on the map, and the caller FORMAT.
 
-Write {n} distinct callers that a real clinic would get on an ordinary week. Vary them widely: reasons for calling
+Today is {today}. Write {n} distinct callers that a real clinic would get on an ordinary week. Vary them widely: reasons for calling
 (common and unusual), symptom descriptions vs named visits, new and existing patients, referrals present, missing or
 mistaken, named doctors (full name, surname only, or misremembered), languages, location and time preferences,
 requests the clinic can't meet, and pure information questions. About 60% booking, 25% no_booking, 15% information.
@@ -126,6 +128,20 @@ def problems(p: dict, bundle) -> list:
             out.append(f"bad outcome {exp['outcome']}")
         if exp["outcome"] != "information" and not exp.get("types"):
             out.append("no types")
+        # every requirement in expect must be something the caller says (they can't be graded on the rest)
+        said = json.dumps({k: caller.get(k) for k in ("goal", "opening", "preferences", "answers")}).lower()
+        if "on_or_after" in exp:
+            out.append("on_or_after is not part of the format")
+        if exp.get("near") and exp["near"].lower() not in said:
+            out.append(f"near '{exp['near']}' is never said by the caller")
+        if exp.get("part_of_day") and exp["part_of_day"] not in said:
+            out.append(f"part_of_day '{exp['part_of_day']}' is never said by the caller")
+        pv = exp.get("provider") or {}
+        named = pv.get("says") or pv.get("name")
+        if named and normalize(named).split()[-1] not in normalize(said):
+            out.append(f"provider '{named}' is never named by the caller")
+        if pv.get("language") and pv["language"].lower() not in said:
+            out.append(f"language '{pv['language']}' is never said by the caller")
         for b in p.get("behaviors", []):
             if b not in BEHAVIORS:
                 out.append(f"unknown behaviour {b}")
@@ -144,11 +160,14 @@ async def main(argv=None) -> None:
     bundle = load_bundle("given")
     places = "\n".join(f"- {p['name']}" + (" (street)" if p["kind"] == "street" else "")
                        for p in bundle.gazetteer["places"])
-    prompt = INSTRUCTIONS.format(n=args.n, fmt=FORMAT, policies="\n".join(bundle.catalog["policies"]),
+    prompt = INSTRUCTIONS.format(today="Monday October 12, 2026", n=args.n, fmt=FORMAT, policies="\n".join(bundle.catalog["policies"]),
                                  places=places, catalog=catalog_text(bundle))
     msg = await llm.chat(args.model, [{"role": "user", "content": prompt}],
                          response_format={"type": "json_object"}, reasoning_effort="medium")
     personas = json.loads(msg.content)["personas"]
+    if HIDDEN_DIR.exists():  # a new set replaces the old one whole
+        for f in HIDDEN_DIR.glob("*.json"):
+            f.unlink()
     HIDDEN_DIR.mkdir(parents=True, exist_ok=True)
     kept, seen = 0, set()
     for p in personas:

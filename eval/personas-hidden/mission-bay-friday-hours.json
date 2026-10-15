@@ -1,25 +1,26 @@
 {
   "id": "mission-bay-friday-hours",
-  "description": "Caller asks whether Mission Bay is open on Friday.",
+  "description": "Caller asks if Mission Bay Health Center operates on Friday.",
   "tags": [
     "information",
-    "location",
-    "hours"
+    "location-hours"
   ],
   "behaviors": [
     "cooperative"
   ],
   "caller": {
-    "name": "Brett Okafor",
-    "dob": "1983-12-01",
+    "name": "Rina Das",
+    "dob": "1970-03-15",
     "record": {
       "existing": false,
       "referrals": []
     },
-    "goal": "Check whether the Mission Bay office is open Friday.",
-    "opening": "Is the Mission Bay Health Center open on Fridays?",
+    "goal": "Tell you if the Mission Bay office is open Friday.",
+    "opening": "Is Mission Bay Health Center open this Friday?",
     "answers": {},
-    "preferences": {}
+    "preferences": {
+      "location": "Mission Bay Health Center"
+    }
   },
   "expect": {
     "outcome": "information",

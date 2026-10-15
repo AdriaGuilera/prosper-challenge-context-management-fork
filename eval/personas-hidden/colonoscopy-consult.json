@@ -1,0 +1,46 @@
+{
+  "id": "colonoscopy-consult",
+  "description": "New patient has a screening referral for a colonoscopy consultation.",
+  "tags": [
+    "booking",
+    "gastroenterology",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Anthony Russo",
+    "dob": "1974-09-18",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Colonoscopy Consultation"
+      ]
+    },
+    "goal": "Set you up to discuss the colonoscopy my primary doctor recommended.",
+    "opening": "I turned fifty-two and my doctor sent a referral for a colonoscopy consult.",
+    "answers": {
+      "referral": "Yes, it should be on file from Dr. Moreno."
+    },
+    "preferences": {
+      "location": "near North Gate",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Colonoscopy Consultation"
+      ],
+      "acceptable": [
+        "GI Consultation"
+      ],
+      "suboptimal": []
+    },
+    "near": "North Gate",
+    "part_of_day": "morning"
+  },
+  "source": "hidden"
+}

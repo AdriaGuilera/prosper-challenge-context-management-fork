@@ -1,0 +1,39 @@
+{
+  "id": "cataract-no-referral",
+  "description": "New patient requests a cataract assessment but lacks a referral.",
+  "tags": [
+    "no-booking",
+    "ophthalmology",
+    "referral-missing"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Walter Ingram",
+    "dob": "1946-04-02",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Get you an appointment about my cloudy vision and cataracts.",
+    "opening": "My vision is cloudy and I think it's cataracts; I need an eye specialist.",
+    "answers": {
+      "referral": "No, I have not seen another doctor about it."
+    },
+    "preferences": {
+      "time": "soonest"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Cataract Evaluation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    }
+  },
+  "source": "hidden"
+}

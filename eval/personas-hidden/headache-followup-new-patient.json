@@ -1,0 +1,39 @@
+{
+  "id": "headache-followup-new-patient",
+  "description": "New patient asks for a follow-up-only headache appointment.",
+  "tags": [
+    "no-booking",
+    "new-patient",
+    "neurology"
+  ],
+  "behaviors": [
+    "correction-hunter"
+  ],
+  "caller": {
+    "name": "Paige Sutton",
+    "dob": "1998-09-22",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Book you a quick return visit for my migraines.",
+    "opening": "I just moved here and need a headache follow-up with the neurologist.",
+    "answers": {
+      "history": "I have migraines, but I have never been seen at your clinic and I don't have a referral."
+    },
+    "preferences": {
+      "time": "soonest"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Headache Follow-up"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    }
+  },
+  "source": "hidden"
+}

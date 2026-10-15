@@ -1,0 +1,44 @@
+{
+  "id": "provider-chen-location-disambiguation",
+  "description": "Patient names a cardiologist who works at multiple locations and must choose a site.",
+  "tags": [
+    "booking",
+    "provider",
+    "location"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Vernon Shaw",
+    "dob": "1952-08-22",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Schedule you with Dr. David Chen for my heart rhythm test.",
+    "opening": "Dr. David Chen told me to get an EKG, but I don't remember which office he uses.",
+    "answers": {
+      "history": "I'm already his patient and he said it was just a tracing test."
+    },
+    "preferences": {
+      "doctor": "Dr. David Chen"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "EKG / Electrocardiogram"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "David Chen",
+      "says": "Dr. David Chen",
+      "strict": true
+    }
+  },
+  "source": "hidden"
+}

@@ -1,0 +1,49 @@
+{
+  "id": "dental-cleaning-mandarin",
+  "description": "New patient wants a Mandarin-speaking dentist for a cleaning.",
+  "tags": [
+    "booking",
+    "dental",
+    "language"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Mei Zhou",
+    "dob": "1992-05-03",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Get you a dental cleaning with someone who speaks Mandarin.",
+    "opening": "I am overdue for a cleaning, and I would feel more comfortable speaking Mandarin.",
+    "answers": {
+      "dental-history": "No tooth pain, just a regular cleaning."
+    },
+    "preferences": {
+      "language": "Mandarin",
+      "location": "near North Gate"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Dental Cleaning"
+      ],
+      "acceptable": [
+        "Dental New Patient Exam",
+        "Dental Exam"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "specialty": "Dental",
+      "language": "Mandarin",
+      "strict": true
+    },
+    "near": "North Gate"
+  },
+  "source": "hidden"
+}
