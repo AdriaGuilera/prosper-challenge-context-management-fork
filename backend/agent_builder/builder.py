@@ -27,7 +27,12 @@ EventSink = Callable[[dict], Awaitable[None]]
 class AgentBuilder:
     """Builds a runnable Pipecat Flows graph from a declarative AgentConfig."""
 
-    def __init__(self, config: AgentConfig, emit: Optional[EventSink] = None, ctx: Optional[ToolContext] = None):
+    def __init__(
+        self,
+        config: AgentConfig,
+        emit: Optional[EventSink] = None,
+        ctx: Optional[ToolContext] = None,
+    ):
         self.config = config
         self._nodes_by_name = {n.name: n for n in config.nodes}
         self._emit = emit
@@ -107,7 +112,13 @@ class AgentBuilder:
             # Persist what the caller gave us so later nodes can use it.
             flow_manager.state.update(args)
             logger.info(f"[{edge.function}] -> {edge.target} | collected: {args}")
-            await self._event("edge_taken", source=node.name, target=edge.target, function=edge.function, args=args)
+            await self._event(
+                "edge_taken",
+                source=node.name,
+                target=edge.target,
+                function=edge.function,
+                args=args,
+            )
             await self._event("node_entered", node=edge.target)
             next_node = self._make_node(self._nodes_by_name[edge.target])
             return {"status": "success", **args}, next_node
@@ -120,6 +131,7 @@ class AgentBuilder:
             handler=handler,
         )
 
+    # ---- tools -------------------------------------------------------
     def _make_tool_function(self, node: Node, name: str) -> FlowsFunctionSchema:
         tool = TOOLS[name]
 
@@ -128,10 +140,15 @@ class AgentBuilder:
             key = (node.name, name, json.dumps(args, sort_keys=True, default=str))
             self._repeats[key] = self._repeats.get(key, 0) + 1
             if self._repeats[key] > 2:
-                return {"repeat": True, "instruction": "You already ran this exact lookup and have its answer. "
-                        "Don't run it again: answer the caller, ask them something, or take the next step."}, None
+                return {
+                    "repeat": True,
+                    "instruction": "You already ran this exact lookup and have its answer. "
+                    "Don't run it again: answer the caller, ask them something, or take the next step.",
+                }, None
             call_id = f"{name}-{time.monotonic_ns()}"
-            await self._event("tool_started", id=call_id, node=node.name, tool=name, args=args)
+            await self._event(
+                "tool_started", id=call_id, node=node.name, tool=name, args=args
+            )
             started = time.perf_counter()
             try:
                 result = await run_tool(name, args, self.ctx)
