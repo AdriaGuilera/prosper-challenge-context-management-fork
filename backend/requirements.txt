@@ -13,4 +13,6 @@ pgvector>=0.4
 numpy>=2
 # The OpenAI Decisions API (type search); the SDK has no client for it yet.
 httpx>=0.28
+# Tool argument schemas (agent_builder/tool_schemas.py).
+pydantic>=2.7,<3
 # The text-only eval harness.
