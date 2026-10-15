@@ -125,7 +125,8 @@ def seeded_patient_id(name: str) -> str:
 def patient_state(bundle: Bundle, record: dict, clock: datetime) -> PatientState:
     ids_by_name = bundle.type_ids_by_name()
     refs = set()
-    for r in record.get("referrals", []):
+    # a new patient has no record, so no referral of theirs can be on file (the runner seeds none)
+    for r in record.get("referrals", []) if record.get("existing") else []:
         name = r if isinstance(r, str) else r["type"]
         expires = None if isinstance(r, str) else r.get("expires")
         if expires and date.fromisoformat(expires) < clock.date():
