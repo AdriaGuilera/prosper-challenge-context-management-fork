@@ -59,7 +59,7 @@ Catalogs:
 - six generated variants: small, large (40 locations / 300 providers / 122 types), collisions, gates, sparse calendar, odd hours;
 - three hand-built adversarial catalogs: twins, referral maze, near-duplicate names.
 
-Each catalog has its own gazetteer mapping, lexicon and patient registry.
+Each catalog has its own patient registry (at the time also its own gazetteer mapping and lexicon, both since removed).
 
 Personas:
 - 20 hand-written;

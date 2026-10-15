@@ -4,11 +4,11 @@
 #
 #   catalogs/<name>/bundle.json
 #     catalog    path to catalog.json (the source's own payload)
-#     places     location id -> gazetteer place (+ optional exact coordinates)
 #     patients   the mocked patient registry (referrals by type name)
 #     calendar   {seed, anchor, density, prebook_rate}
 #
-# Every catalog maps into the one shared gazetteer.
+# Every catalog maps into the one shared gazetteer: a location sits in the area its
+# name says ("Downtown Health Center" -> Downtown). Its point is made up from that.
 #
 
 import hashlib
@@ -36,7 +36,7 @@ class Bundle:
     path: Path
     catalog: dict
     version: str
-    places: dict = field(default_factory=dict)       # loc id -> {"place": name, "at": [x, y] | None}
+    places: dict = field(default_factory=dict)       # loc id -> {"place": area | None, "at": [x, y]}
     patients: list = field(default_factory=list)
     calendar: dict = field(default_factory=dict)
     gazetteer: dict = field(default_factory=dict)
@@ -73,6 +73,37 @@ def _read_json(path: Path):
     return json.loads(path.read_text())
 
 
+def _made_up(key: str, span: float) -> float:
+    """A stable number in [-span, span] for `key`."""
+    return (int(hashlib.sha256(key.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF * 2 - 1) * span
+
+
+def place_locations(catalog: dict, gazetteer: dict) -> dict:
+    """location id -> {"place", "at"}. The place is the longest area named in the location's
+    name. The first location in an area sits on its point, later ones up to 1 km away so
+    "nearest" can tell them apart. A name with no area gets a made-up point within 3 km of
+    the middle of the map."""
+    areas = {normalize(p["name"]): p for p in gazetteer["places"] if p["kind"] != "street"}
+    xs = sorted(x for p in areas.values() for x, _ in p["points"])
+    ys = sorted(y for p in areas.values() for _, y in p["points"])
+    mid = xs[len(xs) // 2], ys[len(ys) // 2]
+    out, taken = {}, set()
+    for l in catalog["locations"]:
+        name = f" {normalize(l['name'])} "
+        hits = [a for a in areas if f" {a} " in name]
+        if hits:
+            area = areas[max(hits, key=len)]
+            x, y = area["points"][0]
+            if area["name"] in taken:
+                x, y = x + _made_up(l["id"] + "x", 1), y + _made_up(l["id"] + "y", 1)
+            taken.add(area["name"])
+            out[l["id"]] = {"place": area["name"], "at": [round(x, 1), round(y, 1)]}
+        else:
+            out[l["id"]] = {"place": None, "at": [round(mid[0] + _made_up(l["id"] + "x", 3), 1),
+                                                   round(mid[1] + _made_up(l["id"] + "y", 3), 1)]}
+    return out
+
+
 def load_bundle(name_or_path) -> Bundle:
     path = Path(name_or_path)
     if not path.suffix:
@@ -80,18 +111,16 @@ def load_bundle(name_or_path) -> Bundle:
     spec = _read_json(path)
     base = path.parent
     raw = (base / spec["catalog"]).read_bytes()
-    places = {}
-    for loc_id, v in (_read_json(base / spec["places"]) if spec.get("places") else {}).items():
-        places[loc_id] = {"place": v, "at": None} if isinstance(v, str) else v
+    catalog, gazetteer = json.loads(raw), _read_json(GAZETTEER_PATH)
     return Bundle(
         name=spec["name"],
         path=path,
-        catalog=json.loads(raw),
+        catalog=catalog,
         version=payload_version(raw),
-        places=places,
+        places=place_locations(catalog, gazetteer),
         patients=_read_json(base / spec["patients"]) if spec.get("patients") else [],
         calendar=spec.get("calendar", {}),
-        gazetteer=_read_json(GAZETTEER_PATH),
+        gazetteer=gazetteer,
     )
 
 

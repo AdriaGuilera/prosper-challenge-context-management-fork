@@ -1,7 +1,6 @@
 {
  "name": "gen-collisions",
  "catalog": "catalog.json",
- "places": "places.json",
  "patients": "patients.json",
  "calendar": {
   "seed": 103,

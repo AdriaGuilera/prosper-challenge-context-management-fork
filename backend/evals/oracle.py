@@ -86,14 +86,7 @@ def place_point(bundle: Bundle, name: str) -> Optional[tuple]:
 
 
 def location_points(bundle: Bundle) -> dict:
-    idx = _gz_index(bundle)
-    out = {}
-    for loc_id, m in bundle.places.items():
-        if m.get("at"):
-            out[loc_id] = tuple(m["at"])
-        elif normalize(m["place"]) in idx:
-            out[loc_id] = tuple(idx[normalize(m["place"])]["points"][0])
-    return out
+    return {loc_id: tuple(m["at"]) for loc_id, m in bundle.places.items()}
 
 
 def distances(bundle: Bundle, place: str) -> dict:

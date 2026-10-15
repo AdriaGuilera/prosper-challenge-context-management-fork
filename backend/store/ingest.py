@@ -65,7 +65,6 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
     cat = bundle.catalog
     anchor = anchor or bundle.anchor
     ids_by_name = bundle.type_ids_by_name()
-    gz = {normalize(p["name"]): p for p in bundle.gazetteer["places"]}
 
     async with conn.transaction():
         old = await conn.fetchval("SELECT catalog_version FROM catalogs WHERE name = $1", bundle.name)
@@ -90,12 +89,9 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
         # ---- locations ----------------------------------------------------------
         loc_rows, hour_rows = [], []
         for l in cat["locations"]:
-            m = bundle.places.get(l["id"])
-            place = gz.get(normalize(m["place"])) if m else None
-            xy = (m.get("at") if m else None) or (place["points"][0] if place else None)
+            m = bundle.places[l["id"]]
             loc_rows.append((cv, l["id"], l["name"], l["address"], l["city"], l["phone"], l["hours"],
-                             place["name"] if place else None,
-                             f"POINT({xy[0]} {xy[1]})" if xy else None))
+                             m["place"], f"POINT({m['at'][0]} {m['at'][1]})"))
             try:
                 for d, intervals in parse_hours(l["hours"]).items():
                     for a, b in intervals:
