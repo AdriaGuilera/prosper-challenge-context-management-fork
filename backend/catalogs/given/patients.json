@@ -1,0 +1,7 @@
+[
+  {"id": "pat_001", "name": "Alan Reyes", "dob": "1980-04-02", "referrals": [{"type": "Echocardiogram", "expires": "2027-06-30"}]},
+  {"id": "pat_002", "name": "Maria Lopez", "dob": "1975-09-15", "referrals": []},
+  {"id": "pat_003", "name": "Sam Okafor", "dob": "1992-01-20", "referrals": [{"type": "MRI - Knee", "expires": "2027-03-01"}, {"type": "Orthopedic Consultation", "expires": "2027-03-01"}]},
+  {"id": "pat_004", "name": "Grace Kim", "dob": "1958-11-03", "referrals": [{"type": "Cardiology Consultation", "expires": "2027-01-15"}]},
+  {"id": "pat_005", "name": "Jordan Bell", "dob": "2001-07-08", "referrals": []}
+]

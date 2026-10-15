@@ -1,0 +1,28 @@
+{
+  "id": "echo-no-referral",
+  "description": "Wants an echocardiogram with no referral on file.",
+  "tags": [
+    "gate:referral",
+    "refusal"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Maria Lopez",
+    "dob": "1975-09-15",
+    "record": {
+      "existing": true
+    },
+    "goal": "Book an echocardiogram; your GP mentioned it a while ago. You don't think you have any paperwork for it. You only want this today: if it can't be booked, don't book something else instead.",
+    "opening": "Hi, I'd like to get an echocardiogram."
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Echocardiogram"
+      ]
+    }
+  }
+}

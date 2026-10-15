@@ -1,0 +1,38 @@
+{
+  "id": "mri-back",
+  "description": "'An MRI' without saying which part; it fits every MRI, so the agent must ask which one.",
+  "tags": [
+    "lookalike",
+    "gate:capability"
+  ],
+  "behaviors": [
+    "vague"
+  ],
+  "caller": {
+    "name": "Lena Park",
+    "dob": "1977-07-07",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "MRI - Spine"
+      ]
+    },
+    "goal": "Book the MRI your doctor referred you for. It's for your lower back.",
+    "opening": "Hi, I need to schedule an MRI.",
+    "answers": {
+      "which body part": "my lower back"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "MRI - Spine"
+      ]
+    },
+    "must_ask": [
+      "visit:MRI - Brain|MRI - Spine|MRI - Knee"
+    ],
+    "time": "any"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "id": "spanish-pediatrician-sick-kid",
+  "description": "Language preference + pediatric sick visit.",
+  "tags": [
+    "preference:language"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Sofia Ruiz",
+    "dob": "2017-02-14",
+    "record": {
+      "existing": true
+    },
+    "goal": "You're a parent. Your daughter Sofia (born Feb 14, 2017) has a fever. You want a pediatrician who speaks Spanish, soonest.",
+    "opening": "Hi, my daughter is sick, I'd like her to see a pediatrician who speaks Spanish.",
+    "answers": {
+      "patient name and date of birth": "Sofia Ruiz, February 14th 2017",
+      "child or adult": "she's my daughter, she's nine"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Pediatric Sick Visit"
+      ]
+    },
+    "provider": {
+      "specialty": "Pediatrics",
+      "language": "Spanish",
+      "strict": true
+    },
+    "time": "soonest"
+  }
+}

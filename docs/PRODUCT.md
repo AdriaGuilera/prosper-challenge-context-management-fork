@@ -22,11 +22,11 @@ Success: a reviewer can watch a call and see why the agent picked a given appoin
 
 ## Positioning
 
-The LLM proposes; deterministic code disposes. Retrieval is narrow, typed tool calls over a normalised SQLite catalog (anchored queries, bounded results that carry their discriminators), node-scoped prompts and tools in the flow graph, and a commit-time `bookable` check so an invalid booking cannot be written. Ambiguity the data cannot resolve is asked in the caller's vocabulary.
+The LLM proposes; deterministic code disposes. Retrieval is narrow, typed tool calls over a normalised Postgres catalog (anchored queries, bounded results that carry their discriminators), node-scoped prompts and tools in the flow graph, and a commit-time `bookable` check so an invalid booking cannot be written. Ambiguity the data cannot resolve is asked in the caller's vocabulary.
 
 ## Operating Context
 
-- Reviewed during a live demo call; also read later via `solution.md` and the `decisions/` record.
+- Reviewed during a live demo call; also read later via `solution.md`.
 - Voice path: browser mic → ElevenLabs STT → OpenAI LLM → ElevenLabs TTS → browser.
 - Agents are declarative JSON (`backend/example_flow.json`) compiled by `backend/agent_builder/` into a Pipecat Flows graph.
 - Time budget for the whole challenge: roughly 8–12 hours.
@@ -40,14 +40,14 @@ In scope for the UI:
 Out of scope for now (explicitly not chosen): a catalog manager UI and a cost/accuracy comparison view.
 
 Constraints:
-- No synchronous I/O in the call's turn path (decision 011).
+- No synchronous I/O in the call's turn path.
 - Availability is mocked; the catalog is `backend/data/catalog.json` (82 appointment types, 50 providers, 8 locations).
-- Policy IR/CEL, PostGIS, CP-SAT, embeddings and multi-tenancy are designed but descoped (decision 010).
+- Policy IR/CEL, CP-SAT and multi-tenancy are out of scope.
 
 ## Evidence on Hand
 
 - `task.md` — the challenge brief.
-- `decisions/001–012`, `approaches/`, `reviews/` — the design record.
+- `eval/results.md` — what the eval measured.
 - Measured numbers in the record: 760/760 valid triples via the `bookable` view, anchored queries at 0.017 ms, full-catalog dump ≈8k tokens now.
 - No customers, testimonials or production usage exist; do not fabricate any.
 

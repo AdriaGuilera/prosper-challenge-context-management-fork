@@ -18,7 +18,7 @@ from loguru import logger
 from pipecat_flows import FlowManager, FlowsFunctionSchema, NodeConfig
 
 from .schema import AgentConfig, Edge, Node
-from .tools import TOOLS, result_size
+from .tools import TOOLS, ToolContext, result_size, run_tool, schema_properties
 
 # Call events for the builder UI: node_entered, edge_taken, tool_started, tool_finished.
 EventSink = Callable[[dict], Awaitable[None]]
@@ -27,11 +27,23 @@ EventSink = Callable[[dict], Awaitable[None]]
 class AgentBuilder:
     """Builds a runnable Pipecat Flows graph from a declarative AgentConfig."""
 
-    def __init__(self, config: AgentConfig, emit: Optional[EventSink] = None):
+    def __init__(
+        self,
+        config: AgentConfig,
+        emit: Optional[EventSink] = None,
+        ctx: Optional[ToolContext] = None,
+    ):
         self.config = config
         self._nodes_by_name = {n.name: n for n in config.nodes}
         self._emit = emit
+        # Per-call tool state: catalog, calendar scope, clock, and what the call has established.
+        self.ctx = ctx or ToolContext()
+        self._repeats: dict = {}
         self._validate()
+
+    async def prepare(self) -> None:
+        """Resolve the catalog version and its enums before the first node is built."""
+        await self.ctx.prepare()
 
     def set_event_sink(self, emit: EventSink) -> None:
         self._emit = emit
@@ -100,7 +112,13 @@ class AgentBuilder:
             # Persist what the caller gave us so later nodes can use it.
             flow_manager.state.update(args)
             logger.info(f"[{edge.function}] -> {edge.target} | collected: {args}")
-            await self._event("edge_taken", source=node.name, target=edge.target, function=edge.function, args=args)
+            await self._event(
+                "edge_taken",
+                source=node.name,
+                target=edge.target,
+                function=edge.function,
+                args=args,
+            )
             await self._event("node_entered", node=edge.target)
             next_node = self._make_node(self._nodes_by_name[edge.target])
             return {"status": "success", **args}, next_node
@@ -113,15 +131,27 @@ class AgentBuilder:
             handler=handler,
         )
 
+    # ---- tools -------------------------------------------------------
     def _make_tool_function(self, node: Node, name: str) -> FlowsFunctionSchema:
         tool = TOOLS[name]
 
         async def handler(args: dict, flow_manager: FlowManager):
+            # Loop guard: a model that re-runs the same lookup is stuck; tell it so.
+            key = (node.name, name, json.dumps(args, sort_keys=True, default=str))
+            self._repeats[key] = self._repeats.get(key, 0) + 1
+            if self._repeats[key] > 2:
+                return {
+                    "repeat": True,
+                    "instruction": "You already ran this exact lookup and have its answer. "
+                    "Don't run it again: answer the caller, ask them something, or take the next step.",
+                }, None
             call_id = f"{name}-{time.monotonic_ns()}"
-            await self._event("tool_started", id=call_id, node=node.name, tool=name, args=args)
+            await self._event(
+                "tool_started", id=call_id, node=node.name, tool=name, args=args
+            )
             started = time.perf_counter()
             try:
-                result = tool.run(args)
+                result = await run_tool(name, args, self.ctx)
             except Exception as e:  # a broken lookup must not end the call
                 logger.exception(f"[{name}] failed")
                 result = {"error": str(e)}
@@ -142,7 +172,7 @@ class AgentBuilder:
         return FlowsFunctionSchema(
             name=tool.name,
             description=tool.description,
-            properties=tool.properties,
+            properties=schema_properties(tool, self.ctx),
             required=tool.required,
             handler=handler,
         )

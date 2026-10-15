@@ -1,0 +1,286 @@
+{
+ "policies": [
+  "A provider can only be booked at a location listed in their location_ids.",
+  "A provider can only be booked for an appointment type listed in their appointment_type_ids.",
+  "An appointment type with a required_capability can only be booked at a location whose capabilities include that capability (e.g. MRI/X-Ray/CT need 'imaging').",
+  "Appointment types with requires_referral = true need a referral on file before booking.",
+  "A new patient may only book appointment types where new_patients_allowed = true, and only with providers where accepting_new_patients = true.",
+  "When the caller names a provider who practices at multiple locations, the location must be disambiguated before booking."
+ ],
+ "locations": [
+  {
+   "id": "loc_000",
+   "name": "Midtown Medical Group",
+   "address": "100 Main St",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": [
+    "imaging",
+    "lab"
+   ]
+  },
+  {
+   "id": "loc_001",
+   "name": "Richmond Medical Group",
+   "address": "100 Main St",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": [
+    "lab"
+   ]
+  },
+  {
+   "id": "loc_002",
+   "name": "Riverside Medical Group",
+   "address": "100 Main St",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": [
+    "imaging",
+    "surgery"
+   ]
+  },
+  {
+   "id": "loc_003",
+   "name": "Old Mill Medical Group",
+   "address": "100 Main St",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": []
+  }
+ ],
+ "providers": [
+  {
+   "id": "prov_000",
+   "name": "Dr. Linda Park",
+   "title": "MD",
+   "specialty": "Cardiology",
+   "location_ids": [
+    "loc_000",
+    "loc_002"
+   ],
+   "accepting_new_patients": false,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_000",
+    "appt_001"
+   ]
+  },
+  {
+   "id": "prov_001",
+   "name": "Dr. Omar Silva",
+   "title": "MD",
+   "specialty": "Cardiology",
+   "location_ids": [
+    "loc_001"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English",
+    "Arabic"
+   ],
+   "appointment_type_ids": [
+    "appt_000",
+    "appt_001"
+   ]
+  },
+  {
+   "id": "prov_002",
+   "name": "Dr. Grace Novak",
+   "title": "DO",
+   "specialty": "Orthopedics",
+   "location_ids": [
+    "loc_002",
+    "loc_003"
+   ],
+   "accepting_new_patients": false,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_002"
+   ]
+  },
+  {
+   "id": "prov_003",
+   "name": "Dr. Ines Haddad",
+   "title": "MD",
+   "specialty": "Radiology",
+   "location_ids": [
+    "loc_000",
+    "loc_002"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_003"
+   ]
+  },
+  {
+   "id": "prov_004",
+   "name": "Dr. Mei Cohen",
+   "title": "MD",
+   "specialty": "Dermatology",
+   "location_ids": [
+    "loc_001",
+    "loc_003"
+   ],
+   "accepting_new_patients": false,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_004",
+    "appt_005"
+   ]
+  },
+  {
+   "id": "prov_005",
+   "name": "Dr. Kofi Mensah",
+   "title": "NP",
+   "specialty": "Family Medicine",
+   "location_ids": [
+    "loc_000",
+    "loc_001",
+    "loc_003"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English",
+    "Spanish"
+   ],
+   "appointment_type_ids": [
+    "appt_006",
+    "appt_007",
+    "appt_008"
+   ]
+  },
+  {
+   "id": "prov_006",
+   "name": "Dr. Anya Patel",
+   "title": "MD",
+   "specialty": "Family Medicine",
+   "location_ids": [
+    "loc_002"
+   ],
+   "accepting_new_patients": false,
+   "languages": [
+    "English",
+    "Hindi"
+   ],
+   "appointment_type_ids": [
+    "appt_006",
+    "appt_007",
+    "appt_008"
+   ]
+  },
+  {
+   "id": "prov_007",
+   "name": "Dr. Jonah Lee",
+   "title": "MD",
+   "specialty": "Neurology",
+   "location_ids": [
+    "loc_001"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_009"
+   ]
+  }
+ ],
+ "appointment_types": [
+  {
+   "id": "appt_000",
+   "name": "Cardiology Consultation",
+   "specialty": "Cardiology",
+   "duration_min": 40,
+   "requires_referral": true,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_001",
+   "name": "Echocardiogram",
+   "specialty": "Cardiology",
+   "duration_min": 45,
+   "requires_referral": true,
+   "new_patients_allowed": false,
+   "required_capability": "imaging"
+  },
+  {
+   "id": "appt_002",
+   "name": "Orthopedic Consultation",
+   "specialty": "Orthopedics",
+   "duration_min": 40,
+   "requires_referral": true,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_003",
+   "name": "MRI - Knee",
+   "specialty": "Radiology",
+   "duration_min": 45,
+   "requires_referral": true,
+   "new_patients_allowed": false,
+   "required_capability": "imaging"
+  },
+  {
+   "id": "appt_004",
+   "name": "Dermatology Consultation",
+   "specialty": "Dermatology",
+   "duration_min": 30,
+   "requires_referral": true,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_005",
+   "name": "Skin Cancer Screening",
+   "specialty": "Dermatology",
+   "duration_min": 30,
+   "requires_referral": true,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_006",
+   "name": "Annual Physical",
+   "specialty": "Family Medicine",
+   "duration_min": 30,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_007",
+   "name": "Sick Visit",
+   "specialty": "Family Medicine",
+   "duration_min": 20,
+   "requires_referral": false,
+   "new_patients_allowed": false
+  },
+  {
+   "id": "appt_008",
+   "name": "Flu Shot",
+   "specialty": "Family Medicine",
+   "duration_min": 10,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_009",
+   "name": "Neurology Consultation",
+   "specialty": "Neurology",
+   "duration_min": 45,
+   "requires_referral": true,
+   "new_patients_allowed": false
+  }
+ ]
+}

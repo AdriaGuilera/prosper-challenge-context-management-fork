@@ -1,0 +1,238 @@
+{
+ "policies": [
+  "A provider can only be booked at a location listed in their location_ids.",
+  "A provider can only be booked for an appointment type listed in their appointment_type_ids.",
+  "An appointment type with a required_capability can only be booked at a location whose capabilities include that capability (e.g. MRI/X-Ray/CT need 'imaging').",
+  "Appointment types with requires_referral = true need a referral on file before booking.",
+  "A new patient may only book appointment types where new_patients_allowed = true, and only with providers where accepting_new_patients = true.",
+  "When the caller names a provider who practices at multiple locations, the location must be disambiguated before booking."
+ ],
+ "locations": [
+  {
+   "id": "loc_000",
+   "name": "Downtown Clinic",
+   "address": "100 Main St",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": [
+    "lab"
+   ]
+  },
+  {
+   "id": "loc_001",
+   "name": "Mission Bay Clinic",
+   "address": "100 Main St",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": [
+    "imaging"
+   ]
+  },
+  {
+   "id": "loc_002",
+   "name": "North Gate Clinic",
+   "address": "100 Main St",
+   "city": "San Francisco",
+   "phone": "(415) 555-0100",
+   "hours": "Mon-Fri 8:00-17:00",
+   "capabilities": []
+  }
+ ],
+ "providers": [
+  {
+   "id": "prov_000",
+   "name": "Dr. Ravi Singh",
+   "title": "MD",
+   "specialty": "Family Medicine",
+   "location_ids": [
+    "loc_000",
+    "loc_002"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English",
+    "Hindi"
+   ],
+   "appointment_type_ids": [
+    "appt_000",
+    "appt_001",
+    "appt_002",
+    "appt_003",
+    "appt_004",
+    "appt_005",
+    "appt_007"
+   ]
+  },
+  {
+   "id": "prov_001",
+   "name": "Dr. Chloe Williams",
+   "title": "MD",
+   "specialty": "Internal Medicine",
+   "location_ids": [
+    "loc_000",
+    "loc_001"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English"
+   ],
+   "appointment_type_ids": [
+    "appt_000",
+    "appt_001",
+    "appt_003",
+    "appt_004",
+    "appt_006"
+   ]
+  },
+  {
+   "id": "prov_002",
+   "name": "Dr. Mateo Silva",
+   "title": "PA",
+   "specialty": "Lab",
+   "location_ids": [
+    "loc_000"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English",
+    "Spanish"
+   ],
+   "appointment_type_ids": [
+    "appt_008",
+    "appt_009",
+    "appt_010"
+   ]
+  },
+  {
+   "id": "prov_003",
+   "name": "Dr. Yara Haddad",
+   "title": "MD",
+   "specialty": "Radiology",
+   "location_ids": [
+    "loc_001"
+   ],
+   "accepting_new_patients": true,
+   "languages": [
+    "English",
+    "Arabic"
+   ],
+   "appointment_type_ids": [
+    "appt_011",
+    "appt_012"
+   ]
+  }
+ ],
+ "appointment_types": [
+  {
+   "id": "appt_000",
+   "name": "Consultation",
+   "specialty": "General",
+   "duration_min": 30,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_001",
+   "name": "Initial Consultation",
+   "specialty": "General",
+   "duration_min": 45,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_002",
+   "name": "Consult - Extended",
+   "specialty": "General",
+   "duration_min": 60,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_003",
+   "name": "Follow-up Visit",
+   "specialty": "General",
+   "duration_min": 20,
+   "requires_referral": false,
+   "new_patients_allowed": false
+  },
+  {
+   "id": "appt_004",
+   "name": "Follow Up Visit (Short)",
+   "specialty": "General",
+   "duration_min": 10,
+   "requires_referral": false,
+   "new_patients_allowed": false
+  },
+  {
+   "id": "appt_005",
+   "name": "Annual Physical",
+   "specialty": "Family Medicine",
+   "duration_min": 30,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_006",
+   "name": "Annual Wellness Visit",
+   "specialty": "Internal Medicine",
+   "duration_min": 30,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_007",
+   "name": "Annual Exam",
+   "specialty": "Family Medicine",
+   "duration_min": 40,
+   "requires_referral": false,
+   "new_patients_allowed": true
+  },
+  {
+   "id": "appt_008",
+   "name": "Blood Draw / Lab Work",
+   "specialty": "Lab",
+   "duration_min": 15,
+   "requires_referral": false,
+   "new_patients_allowed": true,
+   "required_capability": "lab"
+  },
+  {
+   "id": "appt_009",
+   "name": "Fasting Blood Test",
+   "specialty": "Lab",
+   "duration_min": 15,
+   "requires_referral": false,
+   "new_patients_allowed": true,
+   "required_capability": "lab"
+  },
+  {
+   "id": "appt_010",
+   "name": "Blood Work - Routine",
+   "specialty": "Lab",
+   "duration_min": 15,
+   "requires_referral": false,
+   "new_patients_allowed": true,
+   "required_capability": "lab"
+  },
+  {
+   "id": "appt_011",
+   "name": "Ultrasound",
+   "specialty": "Radiology",
+   "duration_min": 30,
+   "requires_referral": true,
+   "new_patients_allowed": false,
+   "required_capability": "imaging"
+  },
+  {
+   "id": "appt_012",
+   "name": "Ultrasound - Abdominal",
+   "specialty": "Radiology",
+   "duration_min": 45,
+   "requires_referral": true,
+   "new_patients_allowed": false,
+   "required_capability": "imaging"
+  }
+ ]
+}

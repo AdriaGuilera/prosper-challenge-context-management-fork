@@ -1,0 +1,11 @@
+{
+ "name": "adv-referral-maze",
+ "catalog": "catalog.json",
+ "patients": "patients.json",
+ "calendar": {
+  "seed": 12,
+  "anchor": "2026-10-12",
+  "density": "normal",
+  "prebook_rate": 0.35
+ }
+}
