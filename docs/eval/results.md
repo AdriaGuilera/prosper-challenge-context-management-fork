@@ -181,19 +181,19 @@ The alias table, full-text search, the hand-written look-alike groups (`ambiguit
 Type search is now two steps (`store/search.py`):
 
 1. Embeddings shortlist the 10 types whose names are nearest the caller's words.
-2. One OpenAI Decisions API call picks among them, giving a probability per type, plus a yes/no on "do the words fit several of these about equally?".
+2. One OpenAI Decisions API call picks among them, giving a probability per type. It asks only when the probability is spread over a few types.
 
 The same 40 phrases, the 32 held-out ones written before any tuning, and 16 vague phrases where the agent must ask (one per deleted group) were run against the `given` catalog, 3 runs each:
 
 | | right | unsure | wrong | asks on a phrase with one right answer | must-ask phrases that ask |
 |---|---|---|---|---|---|
 | old ranker (alias + full text + vectors) | 29/40 · 19/32 | 9 · 7 | 2 · 6 | – | (groups) |
-| embeddings + Decisions, no groups, no vagueness check | 39/40 · 32/32 | 0 · 0 | 1 · 0 | 0 | 0/16 |
-| embeddings + Decisions, no groups, vagueness check (kept) | 39/40 · 32/32 | 0 · 0 | 1 · 0 | 0 | 7/16, same in all 3 runs |
+| embeddings + Decisions, no groups, no vagueness check (kept) | 39/40 · 32/32 | 0 · 0 | 1 · 0 | 0 | 0/16 |
+| embeddings + Decisions, no groups, vagueness check (tried, removed) | 39/40 · 32/32 | 0 · 0 | 1 · 0 | 0 | 7/16, same in all 3 runs |
 
 - **Without any check, the Decisions API never asks.** It is confident: "I want my skin checked" goes to Full Body Skin Exam at 0.96, and "I need to schedule an MRI" comes back as *none*.
-- **The vagueness question has to see the visit names.** Each Decisions question is answered on its own, so the check lists the shortlist itself. Without the names it never said yes.
-- **What still books without asking:**
+- **A vagueness question recovered 7 of 16 but was removed to keep the code simple.** It had to list the shortlist itself, because each Decisions question is answered on its own. Without the names it never said yes.
+- **What books without asking**, even with the vagueness check:
   - "I need a blood test" → Blood Draw (no fasting question);
   - "I need to see the dentist" → Dental Exam;
   - "I need a vaccine" → Vaccination / Immunization;
@@ -202,7 +202,7 @@ The same 40 phrases, the 32 held-out ones written before any tuning, and 16 vagu
   - "checkup for my baby" → Well-Child Visit.
 
   Most of these are defensible picks. The groups used to force a question on every one of them.
-- **Live smoke** (`20261015-213420-nogroups-smoke`, gpt-4o-mini, N=2, the 3 hand-written look-alike personas): 4/8 pass.
+- **Live smoke, run with the vagueness check** (`20261015-213420-nogroups-smoke`, gpt-4o-mini, N=2, the 3 hand-written look-alike personas): 4/8 pass.
   - Skin check passed 3/4: both cooperative runs and one vague run; the other vague run failed only because the agent read a confirmation code that wasn't in BOOKINGS.
   - Annual passed 1/2: the other run booked Annual Physical without asking.
   - MRI failed 2/2. Search did ask, but the caller only has a referral for MRI - Spine, so the agent offered that one and confirmed it rather than naming brain/spine/knee.

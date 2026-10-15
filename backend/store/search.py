@@ -22,7 +22,6 @@ SHORTLIST = 10      # measured: the right type was in the top 10 for 66 of 67 la
 MAX_CHOICES = 254   # the API takes 255 choices; one is "none"
 MATCH_P = 0.6       # the pick's probability at or above this: match
 ASK_P = 0.15        # types at or above this are the ones to ask between
-OPEN_P = 0.02       # when the words fit several visits, types at or above this are the ones to ask between
 NONE = "none of these"
 
 
@@ -60,11 +59,6 @@ def _questions(types: dict, shortlist: list) -> list:
                                                               f"{types[t]['duration_min']} min"} for t in shortlist]
                    + [{"value": NONE, "description": "No clue to any medical need at all: a greeting, a name, "
                                                      "a yes/no, or just 'an appointment'."}],
-    }, {
-        "type": "predicate", "name": "open",
-        "instructions": "The clinic books these visits: " + "; ".join(labels[t] for t in shortlist) + ". Do the "
-                        "caller's words fit two or more of them about equally well, so a scheduler would have to ask "
-                        "which one they mean before booking? (No if the words point to one visit, or to none.)",
     }]
 
 
@@ -96,11 +90,6 @@ async def rank_types(conn, cv: str, query: str, candidates: list) -> TypeRanking
     probs = {p["value"]: p["probability"] for p in visit["probabilities"]}
     ranked = sorted(((by_name[n], p) for n, p in probs.items() if n in by_name), key=lambda x: (-x[1], x[0]))
     p_top = ranked[0][1] if ranked else 0.0
-    # 0. The words fit several visits about equally: ask among the likeliest.
-    if answers["open"].get("probability", 0) >= 0.5:
-        near = [t for t, p in ranked if p >= OPEN_P][:3]
-        if len(near) >= 2:
-            return TypeRanking("ask", ranked, candidates=near)
     # 1. One clear pick.
     if visit["choice"] != NONE and p_top >= MATCH_P:
         return TypeRanking("match", ranked, candidates=[ranked[0][0]])
