@@ -48,6 +48,8 @@ class ToolContext:
     enums: dict = field(default_factory=dict)
     policies: Optional[PolicySet] = None                 # every "can this be booked" decision goes through this
 
+    # Load the catalog version, its policies and its value lists once per call;
+    # fail if the catalog isn't ingested or changed on disk.
     async def prepare(self) -> None:
         if self.cv:
             return
@@ -70,20 +72,24 @@ class ToolContext:
                     "SELECT DISTINCT language FROM provider_languages WHERE catalog_version = $1 ORDER BY 1", self.cv)],
             }
 
+    # The calendars this call reads: the shared base plus its own scope.
     @property
     def scopes(self) -> list:
         return ["base", self.scope]
 
+    # The call's clock, to the minute.
     def now(self) -> datetime:
         return self.clock().replace(second=0, microsecond=0)
 
 
+# Wrap options in the bounded result shape: {total, shown, truncated, ...extra, options}.
 def _bounded(options: list, total: Optional[int] = None, limit: int = MAX_RESULTS, **extra) -> dict:
     total = len(options) if total is None else total
     shown = options[:limit]
     return {"total": total, "shown": len(shown), "truncated": total > len(shown), **extra, "options": shown}
 
 
+# Today as the model should say it, e.g. 'Monday October 12, 2026'.
 def _today(ctx: ToolContext) -> str:
     return ctx.now().strftime("%A %B %-d, %Y")
 
@@ -93,6 +99,7 @@ def _today(ctx: ToolContext) -> str:
 _DOB_FORMATS = ["%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%B %d %Y", "%b %d %Y", "%d %B %Y", "%B %d, %Y", "%m-%d-%Y"]
 
 
+# A spoken or written date of birth as a date, or None if no known format fits.
 def parse_dob(text: str) -> Optional[date]:
     text = re.sub(r"(\d)(st|nd|rd|th)\b", r"\1", (text or "").strip())
     for fmt in _DOB_FORMATS:
@@ -103,6 +110,7 @@ def parse_dob(text: str) -> Optional[date]:
     return None
 
 
+# Find the caller by name and date of birth; remember them (or a new patient) in the session.
 async def lookup_patient(args: LookupPatientArgs, ctx: ToolContext, conn) -> dict:
     name = args.full_name.strip()
     dob = parse_dob(args.date_of_birth)
@@ -138,13 +146,14 @@ async def lookup_patient(args: LookupPatientArgs, ctx: ToolContext, conn) -> dic
     }
 
 
+# The looked-up patient as the policies see them.
 def _state(patient: Optional[dict]) -> Optional[PatientState]:
-    """The looked-up patient as the policies see them."""
     if not patient:
         return None
     return PatientState(is_new=patient["is_new"], referral_type_ids=frozenset(patient["referrals"]))
 
 
+# Age in whole years on `today`.
 def _age(dob: date, today: date) -> int:
     return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
@@ -152,18 +161,20 @@ def _age(dob: date, today: date) -> int:
 # ---- appointment types ----------------------------------------------------------
 
 
+# Appointment type rows by id, each marked with whether any provider here offers it.
 async def _type_rows(conn, ctx: ToolContext, ids: list) -> dict:
     rows = await conn.fetch("SELECT t.* FROM appointment_types t WHERE t.catalog_version = $1 AND t.id = ANY($2)", ctx.cv, ids)
     offered = {t for _, _, t in ctx.policies.triples()}
     return {r["id"]: {**dict(r), "offered": r["id"] in offered} for r in rows}
 
 
+# The type-level policies (4, 5a) for this patient, as the reason they block it.
 def _patient_block(ctx: ToolContext, t, patient: Optional[dict]) -> Optional[str]:
-    """The type-level policies (4, 5a) for this patient, as the reason they block it."""
     v = ctx.policies.violations(Candidate(appointment_type_id=t["id"]), _state(patient)) if patient else []
     return " ".join(x.reason for x in v) or None
 
 
+# One appointment type as the model sees it, with why this patient can't book it, if they can't.
 def _type_option(ctx: ToolContext, t, patient: Optional[dict]) -> dict:
     opt = {
         "appointment_type_id": t["id"], "name": t["name"], "specialty": t["specialty"],
@@ -179,6 +190,7 @@ def _type_option(ctx: ToolContext, t, patient: Optional[dict]) -> dict:
     return opt
 
 
+# Match the caller's words to appointment types; the status says match, ask, unsure, not_offered or no_match.
 async def search_appointment_types(args: SearchAppointmentTypesArgs, ctx: ToolContext, conn) -> dict:
     query = args.query.strip()
     if not query:
@@ -187,6 +199,7 @@ async def search_appointment_types(args: SearchAppointmentTypesArgs, ctx: ToolCo
     # narrowed to a provider or site: only the types the catalog policies (1-3) allow there
     allowed = sorted({t for _, _, t in ctx.policies.triples(provider_id=provider_id, location_id=location_id)}) \
         if (provider_id or location_id) else None
+    # The type ids to rank: in this specialty (if any) and allowed for the provider or site (if any).
     async def _candidates(spec):
         return [r["id"] for r in await conn.fetch(
             """SELECT t.id FROM appointment_types t WHERE t.catalog_version = $1
@@ -261,6 +274,7 @@ async def search_appointment_types(args: SearchAppointmentTypesArgs, ctx: ToolCo
 _HONORIFIC = re.compile(r"^(dr|doctor|doc)\s+")
 
 
+# Find providers by name and filters; asks when a name fits several, explains when a filter hides the one named.
 async def find_providers(args: FindProvidersArgs, ctx: ToolContext, conn) -> dict:
     q = _HONORIFIC.sub("", normalize(args.name or ""))
     specialty, type_id, location_id = args.specialty, args.appointment_type_id, args.location_id
@@ -368,6 +382,7 @@ async def find_providers(args: FindProvidersArgs, ctx: ToolContext, conn) -> dic
 # ---- locations --------------------------------------------------------------------
 
 
+# Hours rows as {weekday 0-6: [(opens, closes)]}.
 def _week(rows) -> dict:
     week: dict = {}
     for r in rows:
@@ -375,8 +390,8 @@ def _week(rows) -> dict:
     return week
 
 
+# Resolve a place the caller named to a point on the map. Returns (point, problem dict or None).
 async def _place_point(conn, text: str) -> tuple:
-    """(point, problem dict or None)."""
     res = await resolve_place(conn, text)
     if res.status == "resolved":
         return res, None
@@ -391,6 +406,7 @@ async def _place_point(conn, text: str) -> tuple:
                  "instruction": "That place isn't on our map. Ask for a nearby neighbourhood or landmark, or offer the list of locations."}
 
 
+# Find locations by name, services, open day, or distance from a place the caller named.
 async def find_locations(args: FindLocationsArgs, ctx: ToolContext, conn) -> dict:
     name = normalize(args.name or "")
     near, capability, open_on = args.near, args.capability, args.open_on
@@ -467,6 +483,7 @@ async def find_locations(args: FindLocationsArgs, ctx: ToolContext, conn) -> dic
 # ---- availability -------------------------------------------------------------------
 
 
+# Open slots for a visit that this patient may book, soonest or nearest first; records what was offered.
 async def check_availability(args: CheckAvailabilityArgs, ctx: ToolContext, conn) -> dict:
     type_id = args.appointment_type_id
     provider_id, location_id, near = args.provider_id, args.location_id, args.near
@@ -547,9 +564,9 @@ async def check_availability(args: CheckAvailabilityArgs, ctx: ToolContext, conn
     return out
 
 
+# Raw calendar for the naive baseline: the next free times for a provider at a site,
+# with NO policy filtering. The commit gate in book_appointment still applies.
 async def list_slots(args: ListSlotsArgs, ctx: ToolContext, conn) -> dict:
-    """Raw calendar for the naive baseline: the next free times for a provider at a site,
-    with NO policy filtering. The commit gate in book_appointment still applies."""
     provider_id, location_id, type_id = args.provider_id, args.location_id, args.appointment_type_id
     t = await conn.fetchrow("SELECT duration_min FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
     if not t:
@@ -566,12 +583,14 @@ async def list_slots(args: ListSlotsArgs, ctx: ToolContext, conn) -> dict:
 # ---- booking -------------------------------------------------------------------------
 
 
+# The same booking always gives the same key, so a repeated book call returns the first confirmation.
 def _idempotency_key(cv: str, scope: str, patient: dict, type_id: str, provider_id: str, location_id: str, start: str) -> str:
     who = patient.get("id") or f"{normalize(patient['name'])}|{patient['dob']}"
     raw = "|".join([cv, scope, who, type_id, provider_id, location_id, start])
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+# Book an offered slot after re-checking every policy; creates a new patient's record on their first booking.
 async def book_appointment(args: BookAppointmentArgs, ctx: ToolContext, conn) -> dict:
     type_id, provider_id = args.appointment_type_id, args.provider_id
     location_id, start_text = args.location_id, args.start
