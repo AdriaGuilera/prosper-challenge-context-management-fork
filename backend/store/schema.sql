@@ -1,8 +1,8 @@
 -- Canonical store.
 --
--- Every structural row is namespaced by catalog_version (sha of the payload), so
+-- Every structural row is namespaced by its catalog name (bundle.json "name"), so
 -- several catalogs live side by side and an id like appt_002 never leaks across
--- them. Operational rows (schedules, bookings) hang off the same version.
+-- them. Operational rows (schedules, bookings) hang off the same name.
 
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS postgis;
@@ -24,7 +24,6 @@ $$;
 
 CREATE TABLE IF NOT EXISTS catalogs (
     name            text PRIMARY KEY,           -- 'given', 'large', ...
-    catalog_version text NOT NULL UNIQUE,       -- sha256(payload)[:16]
     source_path     text NOT NULL,
     calendar_seed   int  NOT NULL,
     calendar_anchor date NOT NULL,              -- first day the mocked calendar covers
@@ -35,7 +34,7 @@ ALTER TABLE catalogs DROP COLUMN IF EXISTS lint;   -- older databases
 -- ---- structural --------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS locations (
-    catalog_version text NOT NULL,
+    catalog         text NOT NULL,
     id              text NOT NULL,
     name            text NOT NULL,
     address         text NOT NULL,
@@ -44,58 +43,58 @@ CREATE TABLE IF NOT EXISTS locations (
     hours_text      text NOT NULL,              -- as delivered; parsed into location_hours
     place           text,                       -- gazetteer place it maps to
     geom            geometry(Point, 0),         -- synthetic plane, km
-    PRIMARY KEY (catalog_version, id)
+    PRIMARY KEY (catalog, id)
 );
 CREATE INDEX IF NOT EXISTS locations_geom ON locations USING gist (geom);
 CREATE INDEX IF NOT EXISTS locations_name_trgm ON locations USING gin (name gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS location_capabilities (
-    catalog_version text NOT NULL,
+    catalog         text NOT NULL,
     location_id     text NOT NULL,
     capability      text NOT NULL,
-    PRIMARY KEY (catalog_version, location_id, capability)
+    PRIMARY KEY (catalog, location_id, capability)
 );
-CREATE INDEX IF NOT EXISTS location_capabilities_cap ON location_capabilities (catalog_version, capability);
+CREATE INDEX IF NOT EXISTS location_capabilities_cap ON location_capabilities (catalog, capability);
 
 -- Operational: parsed from hours_text at ingest, weekday 1=Mon..7=Sun.
 CREATE TABLE IF NOT EXISTS location_hours (
-    catalog_version text NOT NULL,
+    catalog         text NOT NULL,
     location_id     text NOT NULL,
     weekday         int  NOT NULL CHECK (weekday BETWEEN 1 AND 7),
     opens           time NOT NULL,
     closes          time NOT NULL CHECK (closes > opens),
-    PRIMARY KEY (catalog_version, location_id, weekday, opens)
+    PRIMARY KEY (catalog, location_id, weekday, opens)
 );
 
 CREATE TABLE IF NOT EXISTS providers (
-    catalog_version        text NOT NULL,
+    catalog                text NOT NULL,
     id                     text NOT NULL,
     name                   text NOT NULL,
     search_name            text NOT NULL,       -- name without the "Dr." honorific, lowercased
     title                  text NOT NULL,
     specialty              text NOT NULL,       -- display only, never an eligibility key
     accepting_new_patients boolean NOT NULL,
-    PRIMARY KEY (catalog_version, id)
+    PRIMARY KEY (catalog, id)
 );
 CREATE INDEX IF NOT EXISTS providers_name_trgm ON providers USING gin (search_name gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS provider_languages (
-    catalog_version text NOT NULL,
+    catalog         text NOT NULL,
     provider_id     text NOT NULL,
     language        text NOT NULL,
-    PRIMARY KEY (catalog_version, provider_id, language)
+    PRIMARY KEY (catalog, provider_id, language)
 );
 
 CREATE TABLE IF NOT EXISTS provider_locations (
-    catalog_version text NOT NULL,
+    catalog         text NOT NULL,
     provider_id     text NOT NULL,
     location_id     text NOT NULL,
-    PRIMARY KEY (catalog_version, provider_id, location_id)
+    PRIMARY KEY (catalog, provider_id, location_id)
 );
-CREATE INDEX IF NOT EXISTS provider_locations_loc ON provider_locations (catalog_version, location_id);
+CREATE INDEX IF NOT EXISTS provider_locations_loc ON provider_locations (catalog, location_id);
 
 CREATE TABLE IF NOT EXISTS appointment_types (
-    catalog_version      text NOT NULL,
+    catalog              text NOT NULL,
     id                   text NOT NULL,
     name                 text NOT NULL,
     specialty            text NOT NULL,
@@ -103,17 +102,17 @@ CREATE TABLE IF NOT EXISTS appointment_types (
     requires_referral    boolean NOT NULL,
     new_patients_allowed boolean NOT NULL,
     required_capability  text,                  -- absent on most types: NULL, never ''
-    PRIMARY KEY (catalog_version, id)
+    PRIMARY KEY (catalog, id)
 );
 ALTER TABLE appointment_types DROP COLUMN IF EXISTS search_doc;   -- older databases: full-text search is gone
 
 CREATE TABLE IF NOT EXISTS provider_appointment_types (
-    catalog_version     text NOT NULL,
+    catalog             text NOT NULL,
     provider_id         text NOT NULL,
     appointment_type_id text NOT NULL,
-    PRIMARY KEY (catalog_version, provider_id, appointment_type_id)
+    PRIMARY KEY (catalog, provider_id, appointment_type_id)
 );
-CREATE INDEX IF NOT EXISTS pat_type ON provider_appointment_types (catalog_version, appointment_type_id);
+CREATE INDEX IF NOT EXISTS pat_type ON provider_appointment_types (catalog, appointment_type_id);
 
 -- ---- meaning layer -----------------------------------------------------------
 
@@ -131,12 +130,12 @@ DO $$ BEGIN
     END IF;
 END $$;
 CREATE TABLE IF NOT EXISTS type_embeddings (
-    catalog_version     text NOT NULL,
+    catalog             text NOT NULL,
     appointment_type_id text NOT NULL,
     text                text NOT NULL,
     model               text NOT NULL,
     embedding           vector(1536) NOT NULL,
-    PRIMARY KEY (catalog_version, appointment_type_id, text, model)
+    PRIMARY KEY (catalog, appointment_type_id, text, model)
 );
 
 -- ---- patient state (mocked registry) -----------------------------------------
@@ -144,42 +143,42 @@ CREATE TABLE IF NOT EXISTS type_embeddings (
 -- scope isolates concurrent eval conversations: 'base' rows are the catalog's own
 -- registry; a run adds its patient under its own scope.
 CREATE TABLE IF NOT EXISTS patients (
-    catalog_version text NOT NULL,
+    catalog         text NOT NULL,
     scope           text NOT NULL DEFAULT 'base',
     id              text NOT NULL,
     full_name       text NOT NULL,
     search_name     text NOT NULL,
     date_of_birth   date NOT NULL,
-    PRIMARY KEY (catalog_version, scope, id)
+    PRIMARY KEY (catalog, scope, id)
 );
-CREATE INDEX IF NOT EXISTS patients_lookup ON patients (catalog_version, date_of_birth);
+CREATE INDEX IF NOT EXISTS patients_lookup ON patients (catalog, date_of_birth);
 
 CREATE TABLE IF NOT EXISTS referrals (
-    catalog_version     text NOT NULL,
+    catalog             text NOT NULL,
     scope               text NOT NULL DEFAULT 'base',
     patient_id          text NOT NULL,
     appointment_type_id text NOT NULL,
     expires_on          date NOT NULL,
-    PRIMARY KEY (catalog_version, scope, patient_id, appointment_type_id)
+    PRIMARY KEY (catalog, scope, patient_id, appointment_type_id)
 );
 
 -- ---- calendar ------------------------------------------------------------------
 
 -- Weekly recurring working blocks, generated from a seed, clipped to location hours.
 CREATE TABLE IF NOT EXISTS schedules (
-    catalog_version text NOT NULL,
+    catalog         text NOT NULL,
     provider_id     text NOT NULL,
     location_id     text NOT NULL,
     weekday         int  NOT NULL CHECK (weekday BETWEEN 1 AND 7),
     starts          time NOT NULL,
     ends            time NOT NULL CHECK (ends > starts),
-    PRIMARY KEY (catalog_version, provider_id, weekday, starts)
+    PRIMARY KEY (catalog, provider_id, weekday, starts)
 );
-CREATE INDEX IF NOT EXISTS schedules_pair ON schedules (catalog_version, provider_id, location_id);
+CREATE INDEX IF NOT EXISTS schedules_pair ON schedules (catalog, provider_id, location_id);
 
 CREATE TABLE IF NOT EXISTS appointments (
     id                  bigserial PRIMARY KEY,
-    catalog_version     text NOT NULL,
+    catalog             text NOT NULL,
     scope               text NOT NULL DEFAULT 'base',
     confirmation        text NOT NULL,
     idempotency_key     text NOT NULL,
@@ -191,9 +190,9 @@ CREATE TABLE IF NOT EXISTS appointments (
     ends_at             timestamp NOT NULL,
     status              text NOT NULL DEFAULT 'booked',
     created_at          timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (catalog_version, scope, idempotency_key)
+    UNIQUE (catalog, scope, idempotency_key)
 );
-CREATE INDEX IF NOT EXISTS appointments_provider_time ON appointments (catalog_version, provider_id, starts_at);
+CREATE INDEX IF NOT EXISTS appointments_provider_time ON appointments (catalog, provider_id, starts_at);
 
 DROP FUNCTION IF EXISTS bookable_for(text, boolean, text[]);   -- older databases
 DROP VIEW IF EXISTS bookable;

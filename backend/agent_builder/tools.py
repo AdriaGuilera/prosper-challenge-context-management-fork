@@ -152,18 +152,18 @@ async def _validate(args: dict, ctx: ToolContext, conn) -> tuple:
             args[key] = match
     if "appointment_type_id" in args:
         tid = args["appointment_type_id"]
-        if not await conn.fetchval("SELECT 1 FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, tid):
-            rows = await conn.fetch("SELECT id FROM appointment_types WHERE catalog_version = $1 AND lower(name) = lower($2)", ctx.cv, str(tid))
+        if not await conn.fetchval("SELECT 1 FROM appointment_types WHERE catalog = $1 AND id = $2", ctx.catalog, tid):
+            rows = await conn.fetch("SELECT id FROM appointment_types WHERE catalog = $1 AND lower(name) = lower($2)", ctx.catalog, str(tid))
             if len(rows) != 1:
                 return args, {"error": f"appointment_type_id '{tid}' is not an id. Use an appointment_type_id from search_appointment_types."}, notes
             args["appointment_type_id"] = rows[0]["id"]
             notes.append(f"read appointment type '{tid}' as {rows[0]['id']}")
     if "provider_id" in args:
         pid = args["provider_id"]
-        if not await conn.fetchval("SELECT 1 FROM providers WHERE catalog_version = $1 AND id = $2", ctx.cv, pid):
+        if not await conn.fetchval("SELECT 1 FROM providers WHERE catalog = $1 AND id = $2", ctx.catalog, pid):
             q = fn._HONORIFIC.sub("", normalize(str(pid)))
             rows = await conn.fetch(
-                "SELECT id, name FROM providers WHERE catalog_version = $1 AND name_score($2, search_name) >= 0.8", ctx.cv, q)
+                "SELECT id, name FROM providers WHERE catalog = $1 AND name_score($2, search_name) >= 0.8", ctx.catalog, q)
             if len(rows) != 1:
                 err = {"error": f"provider_id '{pid}' is not an id"
                        + (f" and that name fits {len(rows)} providers" if rows else "")
@@ -176,11 +176,11 @@ async def _validate(args: dict, ctx: ToolContext, conn) -> tuple:
             notes.append(f"read provider '{pid}' as {rows[0]['name']}")
     if "location_id" in args:
         lid = args["location_id"]
-        if not await conn.fetchval("SELECT 1 FROM locations WHERE catalog_version = $1 AND id = $2", ctx.cv, lid):
+        if not await conn.fetchval("SELECT 1 FROM locations WHERE catalog = $1 AND id = $2", ctx.catalog, lid):
             q = normalize(str(lid))
             rows = await conn.fetch(
-                """SELECT id, name FROM locations WHERE catalog_version = $1
-                     AND (position($2 IN lower(name)) > 0 OR lower(coalesce(place, '')) = $2)""", ctx.cv, q)
+                """SELECT id, name FROM locations WHERE catalog = $1
+                     AND (position($2 IN lower(name)) > 0 OR lower(coalesce(place, '')) = $2)""", ctx.catalog, q)
             if len(rows) != 1:
                 err = {"error": f"location_id '{lid}' is not an id. Use a location_id from find_locations."}
                 if len(rows) > 1:

@@ -5,7 +5,7 @@
 #   python -m store.ingest --all            # every bundle under catalogs/
 #   python -m store.ingest given --anchor today   # calendar starts this week (live demo)
 #
-# The payload is never modified. Every row carries catalog_version; re-ingesting the
+# The payload is never modified. Every row carries its catalog name; re-ingesting the
 # same bundle replaces its rows, so ingest is idempotent.
 #
 
@@ -61,17 +61,15 @@ def check(bundle: Bundle) -> None:
 
 async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) -> dict:
     check(bundle)
-    cv = bundle.version
+    catalog = bundle.name
     cat = bundle.catalog
     anchor = anchor or bundle.anchor
     ids_by_name = bundle.type_ids_by_name()
 
     async with conn.transaction():
-        old = await conn.fetchval("SELECT catalog_version FROM catalogs WHERE name = $1", bundle.name)
-        for v in {cv, old} - {None}:
-            for table in STRUCTURAL:
-                await conn.execute(f"DELETE FROM {table} WHERE catalog_version = $1", v)
-        await conn.execute("DELETE FROM catalogs WHERE name = $1 OR catalog_version = $2", bundle.name, cv)
+        for table in STRUCTURAL:
+            await conn.execute(f"DELETE FROM {table} WHERE catalog = $1", catalog)
+        await conn.execute("DELETE FROM catalogs WHERE name = $1", catalog)
 
         # ---- gazetteer (shared) -------------------------------------------------
         await conn.execute("DELETE FROM gazetteer_places")
@@ -90,42 +88,42 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
         loc_rows, hour_rows = [], []
         for l in cat["locations"]:
             m = bundle.places[l["id"]]
-            loc_rows.append((cv, l["id"], l["name"], l["address"], l["city"], l["phone"], l["hours"],
+            loc_rows.append((catalog, l["id"], l["name"], l["address"], l["city"], l["phone"], l["hours"],
                              m["place"], f"POINT({m['at'][0]} {m['at'][1]})"))
             try:
                 for d, intervals in parse_hours(l["hours"]).items():
                     for a, b in intervals:
-                        hour_rows.append((cv, l["id"], d + 1, a, b))
+                        hour_rows.append((catalog, l["id"], d + 1, a, b))
             except HoursError:
                 pass  # unparseable hours: the location gets no open days (calendar.py)
         await conn.executemany(
-            """INSERT INTO locations (catalog_version, id, name, address, city, phone, hours_text, place, geom)
+            """INSERT INTO locations (catalog, id, name, address, city, phone, hours_text, place, geom)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8, ST_GeomFromText($9, 0))""", loc_rows)
         await conn.executemany(
             "INSERT INTO location_hours VALUES ($1,$2,$3,$4,$5)", hour_rows)
         await conn.executemany(
             "INSERT INTO location_capabilities VALUES ($1,$2,$3)",
-            [(cv, l["id"], c) for l in cat["locations"] for c in sorted(set(l.get("capabilities", [])))])
+            [(catalog, l["id"], c) for l in cat["locations"] for c in sorted(set(l.get("capabilities", [])))])
 
         # ---- providers ----------------------------------------------------------
         await conn.executemany(
             "INSERT INTO providers VALUES ($1,$2,$3,$4,$5,$6,$7)",
-            [(cv, p["id"], p["name"], search_name(p["name"]), p["title"], p["specialty"],
+            [(catalog, p["id"], p["name"], search_name(p["name"]), p["title"], p["specialty"],
               p["accepting_new_patients"]) for p in cat["providers"]])
         await conn.executemany(
             "INSERT INTO provider_languages VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
-            [(cv, p["id"], lang) for p in cat["providers"] for lang in p.get("languages", [])])
+            [(catalog, p["id"], lang) for p in cat["providers"] for lang in p.get("languages", [])])
         await conn.executemany(
             "INSERT INTO provider_locations VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
-            [(cv, p["id"], lid) for p in cat["providers"] for lid in p["location_ids"]])
+            [(catalog, p["id"], lid) for p in cat["providers"] for lid in p["location_ids"]])
         await conn.executemany(
             "INSERT INTO provider_appointment_types VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
-            [(cv, p["id"], tid) for p in cat["providers"] for tid in p["appointment_type_ids"]])
+            [(catalog, p["id"], tid) for p in cat["providers"] for tid in p["appointment_type_ids"]])
 
         # ---- types + meaning layer ---------------------------------------------------
         await conn.executemany(
             "INSERT INTO appointment_types VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-            [(cv, t["id"], t["name"], t["specialty"], t["duration_min"], t["requires_referral"],
+            [(catalog, t["id"], t["name"], t["specialty"], t["duration_min"], t["requires_referral"],
               t["new_patients_allowed"], t.get("required_capability") or None)
              for t in cat["appointment_types"]])
 
@@ -135,15 +133,15 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
             vectors = await embeddings.embed(conn, [t for _, t in texts])
             await conn.executemany(
                 "INSERT INTO type_embeddings VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
-                [(cv, tid, text, embeddings.MODEL, vectors[text]) for tid, text in texts])
+                [(catalog, tid, text, embeddings.MODEL, vectors[text]) for tid, text in texts])
 
         # ---- patients --------------------------------------------------------------
         await conn.executemany(
             "INSERT INTO patients VALUES ($1,'base',$2,$3,$4,$5)",
-            [(cv, p["id"], p["name"], search_name(p["name"]), date.fromisoformat(p["dob"])) for p in bundle.patients])
+            [(catalog, p["id"], p["name"], search_name(p["name"]), date.fromisoformat(p["dob"])) for p in bundle.patients])
         await conn.executemany(
             "INSERT INTO referrals VALUES ($1,'base',$2,$3,$4) ON CONFLICT DO NOTHING",
-            [(cv, p["id"], tid, date.fromisoformat(r["expires"]))
+            [(catalog, p["id"], tid, date.fromisoformat(r["expires"]))
              for p in bundle.patients for r in p.get("referrals", [])
              for tid in ids_by_name.get(normalize(r["type"]), [])])
 
@@ -151,13 +149,13 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
         cal = bundle.calendar
         schedules = calendar.generate_schedules(cat, bundle.seed, cal.get("density", "normal"))
         await conn.executemany("INSERT INTO schedules VALUES ($1,$2,$3,$4,$5,$6)",
-                               [(cv, *row) for row in schedules])
+                               [(catalog, *row) for row in schedules])
         prebooked = calendar.generate_prebookings(cat, schedules, bundle.seed, anchor, cal.get("prebook_rate", 0.3))
         await conn.executemany(
-            """INSERT INTO appointments (catalog_version, scope, confirmation, idempotency_key, patient_id,
+            """INSERT INTO appointments (catalog, scope, confirmation, idempotency_key, patient_id,
                    provider_id, location_id, appointment_type_id, starts_at, ends_at)
                VALUES ($1, 'base', $2, $2, 'pat_mock', $3, $4, $5, $6, $7)""",
-            [(cv, f"PRE-{i:05d}", *row) for i, row in enumerate(prebooked)])
+            [(catalog, f"PRE-{i:05d}", *row) for i, row in enumerate(prebooked)])
 
         stats = {
             "locations": len(cat["locations"]), "providers": len(cat["providers"]),
@@ -166,8 +164,8 @@ async def ingest(conn, bundle: Bundle, anchor: date = None, embed: bool = True) 
             "embedded_texts": len(embed_texts(bundle)) if embed else 0,
         }
         await conn.execute(
-            "INSERT INTO catalogs (name, catalog_version, source_path, calendar_seed, calendar_anchor) VALUES ($1,$2,$3,$4,$5)",
-            bundle.name, cv, str(bundle.path), bundle.seed, anchor)
+            "INSERT INTO catalogs (name, source_path, calendar_seed, calendar_anchor) VALUES ($1,$2,$3,$4)",
+            catalog, str(bundle.path), bundle.seed, anchor)
     return stats
 
 
@@ -196,7 +194,7 @@ async def main(argv=None) -> None:
             started = datetime.now()
             stats = await ingest(conn, bundle, _anchor(args.anchor) if args.anchor else None, not args.no_embed)
             ms = (datetime.now() - started).total_seconds() * 1000
-            print(f"[{name}] catalog_version={bundle.version} ingested in {ms:.0f} ms  {stats}")
+            print(f"[{name}] ingested in {ms:.0f} ms  {stats}")
     finally:
         await conn.close()
 

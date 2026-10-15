@@ -21,10 +21,6 @@ CATALOGS_DIR = Path(__file__).parent.parent / "catalogs"
 GAZETTEER_PATH = CATALOGS_DIR / "gazetteer.json"
 
 
-def payload_version(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()[:16]
-
-
 def normalize(text: str) -> str:
     """Lowercase, alphanumerics and single spaces: the key every lookup matches on."""
     return " ".join("".join(c.lower() if c.isalnum() else " " for c in text).split())
@@ -35,7 +31,6 @@ class Bundle:
     name: str
     path: Path
     catalog: dict
-    version: str
     places: dict = field(default_factory=dict)       # loc id -> {"place": area, "at": [x, y]}
     patients: list = field(default_factory=list)
     calendar: dict = field(default_factory=dict)
@@ -110,7 +105,6 @@ def load_bundle(name_or_path) -> Bundle:
         name=spec["name"],
         path=path,
         catalog=catalog,
-        version=payload_version(raw),
         places=place_locations(catalog, gazetteer),
         patients=_read_json(base / spec["patients"]) if spec.get("patients") else [],
         calendar=spec.get("calendar", {}),

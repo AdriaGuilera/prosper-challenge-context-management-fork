@@ -7,7 +7,7 @@
 #   {total, shown, truncated, options[], ...}   never a bare row array, never a silent cut
 #
 # The model never sets a limit, never passes patient state it could get wrong, and
-# never authors an idempotency key or a catalog version: the server owns all four.
+# never authors an idempotency key or a catalog name: the server owns all four.
 #
 
 import hashlib
@@ -44,32 +44,27 @@ class ToolContext:
     scope: str = "live"                                  # bookings land here; 'base' is shared
     clock: Callable[[], datetime] = datetime.now
     session: dict = field(default_factory=dict)
-    cv: Optional[str] = None
     enums: dict = field(default_factory=dict)
     policies: Optional[PolicySet] = None                 # every "can this be booked" decision goes through this
 
-    # Load the catalog version, its policies and its value lists once per call;
-    # fail if the catalog isn't ingested or changed on disk.
+    # Load the catalog's policies and value lists once per call; fail if it isn't ingested.
     async def prepare(self) -> None:
-        if self.cv:
+        if self.policies:
             return
         pool = await db.pool()
         async with pool.acquire() as conn:
-            self.cv = await conn.fetchval("SELECT catalog_version FROM catalogs WHERE name = $1", self.catalog)
-            if not self.cv:
+            if not await conn.fetchval("SELECT 1 FROM catalogs WHERE name = $1", self.catalog):
                 raise RuntimeError(f"Catalog '{self.catalog}' is not ingested. Run `make ingest`.")
             bundle = load_bundle(self.catalog)
-            if bundle.version != self.cv:
-                raise RuntimeError(f"Catalog '{self.catalog}' changed on disk since ingest. Run `make ingest`.")
             self.policies = PolicySet(bundle.catalog)
             self.enums = {
                 "specialty": [r[0] for r in await conn.fetch(
-                    "SELECT DISTINCT specialty FROM (SELECT specialty FROM providers WHERE catalog_version = $1 "
-                    "UNION SELECT specialty FROM appointment_types WHERE catalog_version = $1) s ORDER BY 1", self.cv)],
+                    "SELECT DISTINCT specialty FROM (SELECT specialty FROM providers WHERE catalog = $1 "
+                    "UNION SELECT specialty FROM appointment_types WHERE catalog = $1) s ORDER BY 1", self.catalog)],
                 "capability": [r[0] for r in await conn.fetch(
-                    "SELECT DISTINCT capability FROM location_capabilities WHERE catalog_version = $1 ORDER BY 1", self.cv)],
+                    "SELECT DISTINCT capability FROM location_capabilities WHERE catalog = $1 ORDER BY 1", self.catalog)],
                 "language": [r[0] for r in await conn.fetch(
-                    "SELECT DISTINCT language FROM provider_languages WHERE catalog_version = $1 ORDER BY 1", self.cv)],
+                    "SELECT DISTINCT language FROM provider_languages WHERE catalog = $1 ORDER BY 1", self.catalog)],
             }
 
     # The calendars this call reads: the shared base plus its own scope.
@@ -119,10 +114,10 @@ async def lookup_patient(args: LookupPatientArgs, ctx: ToolContext, conn) -> dic
     q = normalize(name)
     rows = await conn.fetch(
         """SELECT id, full_name, scope, name_score($3, search_name) AS sim FROM patients
-           WHERE catalog_version = $1 AND scope = ANY($2) AND date_of_birth = $4
+           WHERE catalog = $1 AND scope = ANY($2) AND date_of_birth = $4
              AND name_score($3, search_name) >= 0.75
            ORDER BY sim DESC LIMIT 2""",
-        ctx.cv, ctx.scopes, q, dob)
+        ctx.catalog, ctx.scopes, q, dob)
     today = ctx.now().date()
     if not rows:
         ctx.session["patient"] = {"id": None, "name": name, "dob": dob.isoformat(), "is_new": True, "referrals": []}
@@ -134,10 +129,10 @@ async def lookup_patient(args: LookupPatientArgs, ctx: ToolContext, conn) -> dic
     p = rows[0]
     refs = await conn.fetch(
         """SELECT r.appointment_type_id, t.name, r.expires_on FROM referrals r
-           JOIN appointment_types t ON t.catalog_version = r.catalog_version AND t.id = r.appointment_type_id
-           WHERE r.catalog_version = $1 AND r.scope = ANY($2) AND r.patient_id = $3 AND r.expires_on >= $4
+           JOIN appointment_types t ON t.catalog = r.catalog AND t.id = r.appointment_type_id
+           WHERE r.catalog = $1 AND r.scope = ANY($2) AND r.patient_id = $3 AND r.expires_on >= $4
            ORDER BY t.name""",
-        ctx.cv, ctx.scopes, p["id"], today)
+        ctx.catalog, ctx.scopes, p["id"], today)
     ctx.session["patient"] = {"id": p["id"], "name": p["full_name"], "dob": dob.isoformat(), "is_new": False,
                               "referrals": [r["appointment_type_id"] for r in refs]}
     return {
@@ -163,7 +158,7 @@ def _age(dob: date, today: date) -> int:
 
 # Appointment type rows by id, each marked with whether any provider here offers it.
 async def _type_rows(conn, ctx: ToolContext, ids: list) -> dict:
-    rows = await conn.fetch("SELECT t.* FROM appointment_types t WHERE t.catalog_version = $1 AND t.id = ANY($2)", ctx.cv, ids)
+    rows = await conn.fetch("SELECT t.* FROM appointment_types t WHERE t.catalog = $1 AND t.id = ANY($2)", ctx.catalog, ids)
     offered = {t for _, _, t in ctx.policies.triples()}
     return {r["id"]: {**dict(r), "offered": r["id"] in offered} for r in rows}
 
@@ -202,18 +197,18 @@ async def search_appointment_types(args: SearchAppointmentTypesArgs, ctx: ToolCo
     # The type ids to rank: in this specialty (if any) and allowed for the provider or site (if any).
     async def _candidates(spec):
         return [r["id"] for r in await conn.fetch(
-            """SELECT t.id FROM appointment_types t WHERE t.catalog_version = $1
+            """SELECT t.id FROM appointment_types t WHERE t.catalog = $1
                  AND ($2::text IS NULL OR t.specialty = $2) AND ($3::text[] IS NULL OR t.id = ANY($3))""",
-            ctx.cv, spec, allowed)]
+            ctx.catalog, spec, allowed)]
 
     candidates = await _candidates(specialty)
-    ranking = await rank_types(conn, ctx.cv, query, candidates)
+    ranking = await rank_types(conn, ctx.catalog, query, candidates)
     specialty_note = None
     if specialty and (provider_id or location_id) and ranking.status not in ("match", "ask"):
         # Narrowed to a particular provider or site, a specialty label is redundant and often wrong
         # (a visit's label needn't match its provider's): if it kept the words from matching, drop it.
         wider = await _candidates(None)
-        retry = await rank_types(conn, ctx.cv, query, wider)
+        retry = await rank_types(conn, ctx.catalog, query, wider)
         if retry.status in ("match", "ask"):
             candidates, ranking, specialty = wider, retry, None
             specialty_note = (f"Matched without the specialty filter: visit types are labelled loosely, so "
@@ -230,9 +225,9 @@ async def search_appointment_types(args: SearchAppointmentTypesArgs, ctx: ToolCo
         top = await _type_rows(conn, ctx, list(ranking.candidates) or [t for t, _ in ranking.ranked[:1]])
         if not any(r["specialty"] == "Pediatrics" for r in top.values()):
             peds = [r["id"] for r in await conn.fetch(
-                "SELECT id FROM appointment_types WHERE catalog_version = $1 AND specialty = 'Pediatrics' AND id = ANY($2)",
-                ctx.cv, candidates)]
-            child = await rank_types(conn, ctx.cv, query, peds) if peds else None
+                "SELECT id FROM appointment_types WHERE catalog = $1 AND specialty = 'Pediatrics' AND id = ANY($2)",
+                ctx.catalog, candidates)]
+            child = await rank_types(conn, ctx.catalog, query, peds) if peds else None
             if child and child.ranked:
                 child_rows = await _type_rows(conn, ctx, [t for t, _ in child.ranked[:3]])
                 options = [_type_option(ctx, child_rows[t], patient) for t, _ in child.ranked[:3] if t in child_rows]
@@ -288,28 +283,28 @@ async def find_providers(args: FindProvidersArgs, ctx: ToolContext, conn) -> dic
                   CASE WHEN $2 = '' THEN 1.0 ELSE name_score($2, p.search_name) END AS score,
                   (SELECT json_agg(json_build_object('location_id', l.id, 'name', l.name) ORDER BY l.name)
                      FROM provider_locations pl JOIN locations l
-                       ON l.catalog_version = pl.catalog_version AND l.id = pl.location_id
-                    WHERE pl.catalog_version = p.catalog_version AND pl.provider_id = p.id) AS locations,
+                       ON l.catalog = pl.catalog AND l.id = pl.location_id
+                    WHERE pl.catalog = p.catalog AND pl.provider_id = p.id) AS locations,
                   (SELECT array_agg(language ORDER BY language) FROM provider_languages pg
-                    WHERE pg.catalog_version = p.catalog_version AND pg.provider_id = p.id) AS languages
+                    WHERE pg.catalog = p.catalog AND pg.provider_id = p.id) AS languages
            FROM providers p
-           WHERE p.catalog_version = $1
+           WHERE p.catalog = $1
              AND ($2 = '' OR name_score($2, p.search_name) >= 0.6)
              AND ($3::text IS NULL OR p.specialty = $3)
              AND ($4::text[] IS NULL OR p.id = ANY($4))
-             AND ($5::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog_version = $1
+             AND ($5::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog = $1
                     AND pl.provider_id = p.id AND pl.location_id = $5))
-             AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM provider_languages pg WHERE pg.catalog_version = $1
+             AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM provider_languages pg WHERE pg.catalog = $1
                     AND pg.provider_id = p.id AND lower(pg.language) = lower($6)))
              AND ($7::bool IS NULL OR p.accepting_new_patients = $7)
            ORDER BY score DESC, p.name, p.id""")
-    rows = await conn.fetch(sql, ctx.cv, q, specialty, can_do, location_id, language, accepting)
+    rows = await conn.fetch(sql, ctx.catalog, q, specialty, can_do, location_id, language, accepting)
     specialty_note = None
     if not rows and specialty and q:
         # A name is more specific than a label: if the specialty alone hides the person the caller
         # named (visit and provider labels often differ), answer for the name and say so. Without a
         # name, a specialty is what the caller asked for ("a pediatrician") and stays a filter.
-        rows = await conn.fetch(sql, ctx.cv, q, None, can_do, location_id, language, accepting)
+        rows = await conn.fetch(sql, ctx.catalog, q, None, can_do, location_id, language, accepting)
         if rows:
             specialty_note = (f"No provider is labelled '{specialty}' for this, so that filter was dropped; these "
                               "match everything else you asked. Specialty labels on visits and providers often differ.")
@@ -351,9 +346,9 @@ async def find_providers(args: FindProvidersArgs, ctx: ToolContext, conn) -> dic
     elif not rows:
         filtered = (specialty or type_id or location_id or language or accepting is not None)
         exists = await conn.fetch(
-            "SELECT name, specialty, accepting_new_patients FROM providers WHERE catalog_version = $1 "
+            "SELECT name, specialty, accepting_new_patients FROM providers WHERE catalog = $1 "
             "AND name_score($2, search_name) >= 0.6 ORDER BY name_score($2, search_name) DESC LIMIT 3",
-            ctx.cv, q) if q and filtered else []
+            ctx.catalog, q) if q and filtered else []
         if exists:
             # a filter must never make a real person disappear: say who it is and why they don't fit
             who = "; ".join(f"{r['name']} ({r['specialty']}"
@@ -429,25 +424,25 @@ async def find_locations(args: FindLocationsArgs, ctx: ToolContext, conn) -> dic
                   CASE WHEN $8 = '' THEN 1.0 ELSE greatest(similarity(lower(l.name), $8),
                        word_similarity($8, lower(l.name)), similarity(lower(coalesce(l.place, '')), $8)) END AS score,
                   (SELECT array_agg(capability ORDER BY capability) FROM location_capabilities c
-                    WHERE c.catalog_version = l.catalog_version AND c.location_id = l.id) AS capabilities
+                    WHERE c.catalog = l.catalog AND c.location_id = l.id) AS capabilities
            FROM locations l
-           WHERE l.catalog_version = $1
-             AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM location_capabilities c WHERE c.catalog_version = $1
+           WHERE l.catalog = $1
+             AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM location_capabilities c WHERE c.catalog = $1
                     AND c.location_id = l.id AND c.capability = $4))
-             AND ($5::int IS NULL OR EXISTS (SELECT 1 FROM location_hours h WHERE h.catalog_version = $1
+             AND ($5::int IS NULL OR EXISTS (SELECT 1 FROM location_hours h WHERE h.catalog = $1
                     AND h.location_id = l.id AND h.weekday = $5))
              AND ($6::text[] IS NULL OR l.id = ANY($6))
-             AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog_version = $1
+             AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog = $1
                     AND pl.location_id = l.id AND pl.provider_id = $7))
              AND ($8 = '' OR greatest(similarity(lower(l.name), $8), word_similarity($8, lower(l.name)),
                     similarity(lower(coalesce(l.place, '')), $8)) >= 0.4)
            ORDER BY CASE WHEN $2::float8 IS NULL THEN 0 ELSE l.geom <-> ST_SetSRID(ST_MakePoint($2, $3), 0) END,
                     score DESC, l.name""",
-        ctx.cv, point[0] if point else None, point[1] if point else None, capability, weekday, hosts,
+        ctx.catalog, point[0] if point else None, point[1] if point else None, capability, weekday, hosts,
         provider_id, name)
     hours = await conn.fetch(
-        "SELECT location_id, weekday, opens, closes FROM location_hours WHERE catalog_version = $1 AND location_id = ANY($2) ORDER BY opens",
-        ctx.cv, [r["id"] for r in rows])
+        "SELECT location_id, weekday, opens, closes FROM location_hours WHERE catalog = $1 AND location_id = ANY($2) ORDER BY opens",
+        ctx.catalog, [r["id"] for r in rows])
     by_loc: dict = {}
     for h in hours:
         by_loc.setdefault(h["location_id"], []).append(h)
@@ -487,7 +482,7 @@ async def find_locations(args: FindLocationsArgs, ctx: ToolContext, conn) -> dic
 async def check_availability(args: CheckAvailabilityArgs, ctx: ToolContext, conn) -> dict:
     type_id = args.appointment_type_id
     provider_id, location_id, near = args.provider_id, args.location_id, args.near
-    t = await conn.fetchrow("SELECT * FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
+    t = await conn.fetchrow("SELECT * FROM appointment_types WHERE catalog = $1 AND id = $2", ctx.catalog, type_id)
     if not t:
         return {"error": f"Unknown appointment type '{type_id}'. Look it up with search_appointment_types first."}
     patient = ctx.session.get("patient")
@@ -516,16 +511,16 @@ async def check_availability(args: CheckAvailabilityArgs, ctx: ToolContext, conn
             return {**problem, "total": 0, "shown": 0, "truncated": False, "options": []}
         point = res.point
     pair_list = pairs
-    slots = await free_slots(conn, ctx.cv, pair_list, t["duration_min"], max(now, ctx.now() + LEAD), ctx.scopes,
+    slots = await free_slots(conn, ctx.catalog, pair_list, t["duration_min"], max(now, ctx.now() + LEAD), ctx.scopes,
                              args.part_of_day or "any")
     meta = {r["id"]: r for r in await conn.fetch(
         """SELECT l.id, l.name, CASE WHEN $3::float8 IS NULL THEN NULL
                   ELSE ST_Distance(l.geom, ST_SetSRID(ST_MakePoint($3, $4), 0)) END AS km
-           FROM locations l WHERE l.catalog_version = $1 AND l.id = ANY($2)""",
-        ctx.cv, list({l for _, l in pair_list}), point[0] if point else None, point[1] if point else None)}
+           FROM locations l WHERE l.catalog = $1 AND l.id = ANY($2)""",
+        ctx.catalog, list({l for _, l in pair_list}), point[0] if point else None, point[1] if point else None)}
     provs = {r["id"]: r for r in await conn.fetch(
-        "SELECT id, name, title, specialty FROM providers WHERE catalog_version = $1 AND id = ANY($2)",
-        ctx.cv, list({p for p, _ in pair_list}))}
+        "SELECT id, name, title, specialty FROM providers WHERE catalog = $1 AND id = ANY($2)",
+        ctx.catalog, list({p for p, _ in pair_list}))}
     grouped: dict = {}
     for p, l, s in slots:
         grouped.setdefault((p, l), []).append(s)
@@ -568,10 +563,10 @@ async def check_availability(args: CheckAvailabilityArgs, ctx: ToolContext, conn
 # with NO policy filtering. The commit gate in book_appointment still applies.
 async def list_slots(args: ListSlotsArgs, ctx: ToolContext, conn) -> dict:
     provider_id, location_id, type_id = args.provider_id, args.location_id, args.appointment_type_id
-    t = await conn.fetchrow("SELECT duration_min FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
+    t = await conn.fetchrow("SELECT duration_min FROM appointment_types WHERE catalog = $1 AND id = $2", ctx.catalog, type_id)
     if not t:
         return {"error": f"Unknown appointment type '{type_id}'."}
-    slots = await free_slots(conn, ctx.cv, [(provider_id, location_id)], t["duration_min"], ctx.now() + LEAD, ctx.scopes)
+    slots = await free_slots(conn, ctx.catalog, [(provider_id, location_id)], t["duration_min"], ctx.now() + LEAD, ctx.scopes)
     today = ctx.now().date()
     options = [{"start": s.isoformat(timespec="minutes"), "say": spoken(s, today)} for _, _, s in slots]
     offered = ctx.session.setdefault("offered", set())
@@ -584,9 +579,9 @@ async def list_slots(args: ListSlotsArgs, ctx: ToolContext, conn) -> dict:
 
 
 # The same booking always gives the same key, so a repeated book call returns the first confirmation.
-def _idempotency_key(cv: str, scope: str, patient: dict, type_id: str, provider_id: str, location_id: str, start: str) -> str:
+def _idempotency_key(catalog: str, scope: str, patient: dict, type_id: str, provider_id: str, location_id: str, start: str) -> str:
     who = patient.get("id") or f"{normalize(patient['name'])}|{patient['dob']}"
-    raw = "|".join([cv, scope, who, type_id, provider_id, location_id, start])
+    raw = "|".join([catalog, scope, who, type_id, provider_id, location_id, start])
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -602,15 +597,15 @@ async def book_appointment(args: BookAppointmentArgs, ctx: ToolContext, conn) ->
     except (TypeError, ValueError):
         return {"booked": False, "problems": ["start must be the slot's 'start' value exactly as check_availability returned it."]}
     start_key = start.isoformat(timespec="minutes")
-    key = _idempotency_key(ctx.cv, ctx.scope, patient, type_id, provider_id, location_id, start_key)
+    key = _idempotency_key(ctx.catalog, ctx.scope, patient, type_id, provider_id, location_id, start_key)
 
     existing = await conn.fetchrow(
-        "SELECT confirmation FROM appointments WHERE catalog_version = $1 AND scope = $2 AND idempotency_key = $3",
-        ctx.cv, ctx.scope, key)
+        "SELECT confirmation FROM appointments WHERE catalog = $1 AND scope = $2 AND idempotency_key = $3",
+        ctx.catalog, ctx.scope, key)
     if existing:
         return {"booked": True, "already_booked": True, "confirmation": existing["confirmation"]}
 
-    t = await conn.fetchrow("SELECT * FROM appointment_types WHERE catalog_version = $1 AND id = $2", ctx.cv, type_id)
+    t = await conn.fetchrow("SELECT * FROM appointment_types WHERE catalog = $1 AND id = $2", ctx.catalog, type_id)
     if not t:
         return {"booked": False, "problems": [f"Unknown appointment type '{type_id}'."]}
     # every policy in the set, 1-6, on the exact booking
@@ -632,8 +627,8 @@ async def book_appointment(args: BookAppointmentArgs, ctx: ToolContext, conn) ->
             "That provider, location and time weren't offered in this call. Run check_availability and offer a time first."]}
 
     async with conn.transaction():
-        await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1 || $2))", ctx.cv, provider_id)
-        free = await free_slots(conn, ctx.cv, [(provider_id, location_id)], t["duration_min"], start, ctx.scopes,
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1 || $2))", ctx.catalog, provider_id)
+        free = await free_slots(conn, ctx.catalog, [(provider_id, location_id)], t["duration_min"], start, ctx.scopes,
                                 per_pair=1, horizon_days=0)
         if not free or free[0][2] != start or start < ctx.now() + LEAD:
             return {"booked": False, "problems": ["That time was just taken or is no longer available. Offer another."]}
@@ -642,19 +637,19 @@ async def book_appointment(args: BookAppointmentArgs, ctx: ToolContext, conn) ->
             patient_id = "new_" + key[:10]
             await conn.execute(
                 "INSERT INTO patients VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
-                ctx.cv, ctx.scope, patient_id, patient["name"], normalize(patient["name"]), date.fromisoformat(patient["dob"]))
+                ctx.catalog, ctx.scope, patient_id, patient["name"], normalize(patient["name"]), date.fromisoformat(patient["dob"]))
             patient["id"] = patient_id
         confirmation = "PR-" + key[:6].upper()
         await conn.execute(
-            """INSERT INTO appointments (catalog_version, scope, confirmation, idempotency_key, patient_id,
+            """INSERT INTO appointments (catalog, scope, confirmation, idempotency_key, patient_id,
                    provider_id, location_id, appointment_type_id, starts_at, ends_at)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)""",
-            ctx.cv, ctx.scope, confirmation, key, patient_id, provider_id, location_id, type_id,
+            ctx.catalog, ctx.scope, confirmation, key, patient_id, provider_id, location_id, type_id,
             start, start + timedelta(minutes=t["duration_min"]))
     names = await conn.fetchrow(
         """SELECT p.name AS provider, l.name AS location FROM providers p, locations l
-           WHERE p.catalog_version = $1 AND l.catalog_version = $1 AND p.id = $2 AND l.id = $3""",
-        ctx.cv, provider_id, location_id)
+           WHERE p.catalog = $1 AND l.catalog = $1 AND p.id = $2 AND l.id = $3""",
+        ctx.catalog, provider_id, location_id)
     ctx.session.setdefault("booked", []).append(confirmation)
     return {
         "booked": True, "confirmation": confirmation,

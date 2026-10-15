@@ -21,7 +21,7 @@ WITH pairs AS (
     FROM schedules s
     JOIN pairs USING (provider_id, location_id)
     JOIN days d ON extract(isodow FROM d.day) = s.weekday
-    WHERE s.catalog_version = $1
+    WHERE s.catalog = $1
 ), cand AS (
     SELECT b.provider_id, b.location_id, gs AS starts
     FROM blocks b,
@@ -33,7 +33,7 @@ WITH pairs AS (
       AND ($10::int IS NULL OR extract(hour FROM c.starts) < $10)
       AND NOT EXISTS (
           SELECT 1 FROM appointments a
-          WHERE a.catalog_version = $1 AND a.scope = ANY($8) AND a.status = 'booked'
+          WHERE a.catalog = $1 AND a.scope = ANY($8) AND a.status = 'booked'
             AND a.provider_id = c.provider_id
             AND a.starts_at < c.starts + make_interval(mins => $6)
             AND a.ends_at > c.starts)
@@ -47,14 +47,14 @@ SELECT provider_id, location_id, starts FROM numbered WHERE n <= $11 ORDER BY st
 PARTS_OF_DAY = {"morning": (None, 12), "afternoon": (12, None), "any": (None, None)}
 
 
-async def free_slots(conn, cv: str, pairs: list, duration_min: int, now: datetime, scopes: list,
+async def free_slots(conn, catalog: str, pairs: list, duration_min: int, now: datetime, scopes: list,
                      part_of_day: str = "any", per_pair: int = 3, horizon_days: int = HORIZON_DAYS) -> list:
     """[(provider_id, location_id, starts)] ordered by time, at most per_pair per pair."""
     if not pairs:
         return []
     lo, hi = PARTS_OF_DAY.get(part_of_day or "any", (None, None))
     rows = await conn.fetch(
-        SLOTS_SQL, cv, [p for p, _ in pairs], [l for _, l in pairs],
+        SLOTS_SQL, catalog, [p for p, _ in pairs], [l for _, l in pairs],
         now.date(), now.date() + timedelta(days=horizon_days), duration_min, now, scopes,
         lo, hi, per_pair)
     return [(r["provider_id"], r["location_id"], r["starts"]) for r in rows]

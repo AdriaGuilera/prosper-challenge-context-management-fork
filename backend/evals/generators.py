@@ -29,7 +29,7 @@ BEHAVIOURS = ["cooperative", "vague", "terse-impatient", "rambler", "correction-
 class _Gen:
     def __init__(self, bundle: Bundle):
         self.b = bundle
-        self.rng = random.Random(f"gen:{bundle.name}:{bundle.version}")
+        self.rng = random.Random(f"gen:{bundle.name}")
         self.cat = bundle.catalog
         self.types = bundle.types
         self.providers = bundle.providers

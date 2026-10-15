@@ -32,7 +32,7 @@ are gitignored, so this file is the record. Every number below names its run id 
 ## What was built and what the eval checks
 
 Store (Postgres 17 + pgvector + PostGIS + pg_trgm + fuzzystrmatch):
-- normalised tables namespaced by `catalog_version`;
+- normalised tables namespaced by catalog name;
 - policies 1–5 as the `bookable` relation, and policy 6 as a commit-time "was this exact slot offered" check;
 - a seeded calendar, with slots computed in SQL and joined last.
 

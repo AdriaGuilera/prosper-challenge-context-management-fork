@@ -273,7 +273,7 @@ _CALENDARS: dict = {}
 
 
 def _calendar(bundle: Bundle, anchor: date) -> tuple:
-    key = (bundle.version, bundle.seed, anchor)
+    key = (bundle.name, bundle.seed, anchor)
     if key not in _CALENDARS:
         schedules = calendar.generate_schedules(bundle.catalog, bundle.seed, bundle.calendar.get("density", "normal"))
         bookings = calendar.generate_prebookings(bundle.catalog, schedules, bundle.seed, anchor,

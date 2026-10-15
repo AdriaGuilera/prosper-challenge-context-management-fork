@@ -32,13 +32,13 @@ class TypeRanking:
     candidates: list = field(default_factory=list)   # the ids the caller must choose among
 
 
-async def _shortlist(conn, cv: str, query: str, candidates: list) -> list:
+async def _shortlist(conn, catalog: str, query: str, candidates: list) -> list:
     vec = (await embeddings.embed(conn, [normalize(query)]))[normalize(query)]
     rows = await conn.fetch(
         """SELECT appointment_type_id AS id FROM type_embeddings
-           WHERE catalog_version = $1 AND appointment_type_id = ANY($2) AND model = $4
+           WHERE catalog = $1 AND appointment_type_id = ANY($2) AND model = $4
            GROUP BY appointment_type_id ORDER BY min(embedding <=> $3), appointment_type_id LIMIT $5""",
-        cv, candidates, vec, embeddings.MODEL, SHORTLIST)
+        catalog, candidates, vec, embeddings.MODEL, SHORTLIST)
     return [r["id"] for r in rows]
 
 
@@ -62,14 +62,14 @@ def _questions(types: dict, shortlist: list) -> list:
     }]
 
 
-async def rank_types(conn, cv: str, query: str, candidates: list) -> TypeRanking:
+async def rank_types(conn, catalog: str, query: str, candidates: list) -> TypeRanking:
     if not candidates or not normalize(query):
         return TypeRanking("none", [])
     types = {r["id"]: dict(r) for r in await conn.fetch(
-        "SELECT id, name, specialty, duration_min FROM appointment_types WHERE catalog_version = $1 AND id = ANY($2)",
-        cv, candidates)}
+        "SELECT id, name, specialty, duration_min FROM appointment_types WHERE catalog = $1 AND id = ANY($2)",
+        catalog, candidates)}
     try:
-        shortlist = await _shortlist(conn, cv, query, candidates)
+        shortlist = await _shortlist(conn, catalog, query, candidates)
     except Exception as e:  # degradation ladder: let the Decisions API choose among every candidate
         logger.warning(f"embedding shortlist unavailable, offering all candidates: {type(e).__name__}: {e}")
         shortlist = sorted(types)[:MAX_CHOICES]

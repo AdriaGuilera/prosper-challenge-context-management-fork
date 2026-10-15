@@ -44,30 +44,30 @@ AGENT_PATH = BACKEND / "agents" / "clinic-scheduler.json"
 RUNS_DIR = EVAL_DIR / "runs"
 
 
-async def seed_patient(conn, cv: str, scope: str, persona: dict, bundle) -> None:
+async def seed_patient(conn, catalog: str, scope: str, persona: dict, bundle) -> None:
     caller = persona["caller"]
     rec = caller.get("record", {})
     if not rec.get("existing"):
         return
     pid = seeded_patient_id(caller["name"])
     await conn.execute("INSERT INTO patients VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
-                       cv, scope, pid, caller["name"], normalize(caller["name"]), date.fromisoformat(caller["dob"]))
+                       catalog, scope, pid, caller["name"], normalize(caller["name"]), date.fromisoformat(caller["dob"]))
     ids_by_name = bundle.type_ids_by_name()
     for r in rec.get("referrals", []):
         name = r if isinstance(r, str) else r["type"]
         expires = date(2099, 1, 1) if isinstance(r, str) else date.fromisoformat(r.get("expires", "2099-01-01"))
         for tid in ids_by_name.get(normalize(name), []):
             await conn.execute("INSERT INTO referrals VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
-                               cv, scope, pid, tid, expires)
+                               catalog, scope, pid, tid, expires)
 
 
-async def collect_bookings(conn, cv: str, scope: str) -> list:
+async def collect_bookings(conn, catalog: str, scope: str) -> list:
     """The bookings a conversation wrote, then wipe its scope."""
     rows = await conn.fetch(
         """SELECT confirmation, patient_id, provider_id, location_id, appointment_type_id, starts_at FROM appointments
-           WHERE catalog_version = $1 AND scope = $2 AND status = 'booked' ORDER BY id""", cv, scope)
+           WHERE catalog = $1 AND scope = $2 AND status = 'booked' ORDER BY id""", catalog, scope)
     for table in ("appointments", "referrals", "patients"):
-        await conn.execute(f"DELETE FROM {table} WHERE catalog_version = $1 AND scope = $2", cv, scope)
+        await conn.execute(f"DELETE FROM {table} WHERE catalog = $1 AND scope = $2", catalog, scope)
     return [dict(r) for r in rows]
 
 
@@ -96,7 +96,7 @@ async def converse(job: dict, max_turns: int) -> dict:
 
     pool = await db.pool()
     async with pool.acquire() as conn:
-        await seed_patient(conn, job["cv"], job["scope"], persona, bundle)
+        await seed_patient(conn, job["catalog"], job["scope"], persona, bundle)
     error = None
     try:
         agent_text = await runner.start()
@@ -115,7 +115,7 @@ async def converse(job: dict, max_turns: int) -> dict:
         log({"type": "error", "text": error})
 
     async with pool.acquire() as conn:
-        bookings = await collect_bookings(conn, job["cv"], job["scope"])
+        bookings = await collect_bookings(conn, job["catalog"], job["scope"])
 
     oracle = compute_oracle(persona, bundle, job["anchor"], job["clock"])
     verdict = await judges.judge(oracle, events, bookings, bundle, persona, model=job["judge_model"], meter=log, error=error)
@@ -185,7 +185,7 @@ async def main(argv=None) -> None:
 
     pool = await db.pool()
     async with pool.acquire() as conn:
-        ingested = {r["name"]: r for r in await conn.fetch("SELECT name, catalog_version, calendar_anchor FROM catalogs")}
+        ingested = {r["name"]: r for r in await conn.fetch("SELECT name, calendar_anchor FROM catalogs")}
 
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S") + (f"-{args.label}" if args.label else "")
     out_dir = RUNS_DIR / run_id
@@ -194,9 +194,9 @@ async def main(argv=None) -> None:
     jobs = []
     for name in names:
         bundle = load_bundle(name)
-        if name not in ingested or ingested[name]["catalog_version"] != bundle.version:
-            raise SystemExit(f"Catalog '{name}' is not ingested at its current version: run `make ingest CATALOG={name}`.")
-        cv, anchor = ingested[name]["catalog_version"], ingested[name]["calendar_anchor"]
+        if name not in ingested:
+            raise SystemExit(f"Catalog '{name}' is not ingested: run `make ingest CATALOG={name}`.")
+        catalog, anchor = name, ingested[name]["calendar_anchor"]
         match = lambda p: any(fnmatch.fnmatch(p["id"], g) for g in globs)  # noqa: E731
         personas = list(filter(match, load_personas())) + list(filter(match, generate_personas(bundle)))[: args.max_generated]
         for persona in personas:
@@ -213,7 +213,7 @@ async def main(argv=None) -> None:
                         for rep in range(args.n):
                             jid = f"{name}.{persona['id']}.{b}.{model}.{system}.{rep}"
                             jobs.append({
-                                "id": jid, "persona": persona, "bundle": bundle, "cv": cv, "anchor": anchor,
+                                "id": jid, "persona": persona, "bundle": bundle, "catalog": catalog, "anchor": anchor,
                                 "clock": clock, "behavior": behaviors[b], "model": model, "system": system,
                                 "rep": rep, "scope": f"eval-{uuid.uuid4().hex[:12]}", "judge_model": args.judge_model,
                             })
