@@ -1,0 +1,45 @@
+{
+  "id": "headache-referral-needed",
+  "description": "New patient seeks neurology for headaches without the needed referral.",
+  "tags": [
+    "no-booking",
+    "neurology",
+    "missing-referral"
+  ],
+  "behaviors": [
+    "vague"
+  ],
+  "caller": {
+    "name": "Brenda Knox",
+    "dob": "1979-04-04",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "See a brain doctor about my headaches.",
+    "opening": "I've had these awful migraines and I need a neurologist.",
+    "answers": {
+      "Did a clinician send a neurology referral?": "No, urgent care told me to find one myself."
+    },
+    "preferences": {
+      "location": "North Gate"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Neurology Consultation"
+      ],
+      "acceptable": [],
+      "suboptimal": [
+        "Sick Visit",
+        "Urgent Care Visit"
+      ]
+    },
+    "near": "North Gate",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

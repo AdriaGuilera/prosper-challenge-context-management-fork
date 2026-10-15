@@ -1,0 +1,44 @@
+{
+  "id": "diabetes-new-patient",
+  "description": "New patient asks to book ongoing diabetes management, which is unavailable to new patients.",
+  "tags": [
+    "no-booking",
+    "endocrinology",
+    "new-patient"
+  ],
+  "behaviors": [
+    "correction-hunter"
+  ],
+  "caller": {
+    "name": "Sheila Ford",
+    "dob": "1965-08-08",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "See an endocrinologist to manage my diabetes medicines.",
+    "opening": "I moved here and need someone to take over my diabetes care.",
+    "answers": {
+      "Have you already established with our endocrinology practice?": "No, but I have records from my old doctor."
+    },
+    "preferences": {
+      "location": "Downtown"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Diabetes Management"
+      ],
+      "acceptable": [
+        "Endocrinology Consultation"
+      ],
+      "suboptimal": []
+    },
+    "near": "Downtown",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

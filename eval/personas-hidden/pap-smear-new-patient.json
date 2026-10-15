@@ -1,0 +1,49 @@
+{
+  "id": "pap-smear-new-patient",
+  "description": "New patient requests a routine Pap smear.",
+  "tags": [
+    "booking",
+    "obgyn",
+    "screening"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Jade Whitaker",
+    "dob": "1996-08-21",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Book a Pap test because I am overdue.",
+    "opening": "I am overdue for my Pap smear and would like the earliest appointment.",
+    "answers": {
+      "Are you having symptoms today?": "No, this is routine screening."
+    },
+    "preferences": {
+      "location": "Downtown"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Pap Smear"
+      ],
+      "acceptable": [
+        "Annual Well-Woman Exam"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Linda Nguyen",
+      "says": "Dr. Nguyen",
+      "strict": false
+    },
+    "near": "Downtown",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

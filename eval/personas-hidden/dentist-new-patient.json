@@ -1,0 +1,49 @@
+{
+  "id": "dentist-new-patient",
+  "description": "New patient requests a first dental examination and cleaning.",
+  "tags": [
+    "booking",
+    "dental",
+    "new-patient"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Mina Park",
+    "dob": "1992-07-03",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Set up my first dental appointment and a cleaning if possible.",
+    "opening": "I have not been to a dentist since I moved here, so I need a new-patient dental visit.",
+    "answers": {},
+    "preferences": {
+      "language": "Mandarin",
+      "location": "Mission District"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Dental New Patient Exam"
+      ],
+      "acceptable": [
+        "Dental Exam",
+        "Dental Cleaning"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Lucas Singh",
+      "says": "Dr. Singh",
+      "strict": false
+    },
+    "near": "Mission District",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

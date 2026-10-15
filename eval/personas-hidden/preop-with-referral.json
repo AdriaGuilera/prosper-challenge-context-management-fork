@@ -1,0 +1,50 @@
+{
+  "id": "preop-with-referral",
+  "description": "Existing patient with a referral needs medical clearance before surgery.",
+  "tags": [
+    "booking",
+    "preop",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Walter Bishop",
+    "dob": "1959-01-29",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "Pre-operative Evaluation"
+      ]
+    },
+    "goal": "Get my medical clearance done before my cataract surgery.",
+    "opening": "My eye surgeon needs a pre-op exam before November fifth, and they sent the referral.",
+    "answers": {
+      "When is your surgery?": "November 5, 2026."
+    },
+    "preferences": {
+      "location": "Mission Bay",
+      "language": "Spanish"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Pre-operative Evaluation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Tomas Hernandez",
+      "says": "Dr. Hernandez",
+      "strict": false
+    },
+    "near": "Mission Bay",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

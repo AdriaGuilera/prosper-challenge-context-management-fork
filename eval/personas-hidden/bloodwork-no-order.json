@@ -1,0 +1,45 @@
+{
+  "id": "bloodwork-no-order",
+  "description": "Caller requests blood work but has no order and is not asking for a clinical visit.",
+  "tags": [
+    "no-booking",
+    "lab",
+    "missing-order"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Peter Mullen",
+    "dob": "1970-07-22",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Get my cholesterol blood drawn tomorrow.",
+    "opening": "I just need a blood test tomorrow morning.",
+    "answers": {
+      "Do you have a lab order from a clinician?": "No, I thought I could just request cholesterol testing."
+    },
+    "preferences": {
+      "location": "North Gate",
+      "time": "tomorrow morning"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Blood Draw / Lab Work",
+        "Fasting Blood Test"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "North Gate",
+    "time": "soonest",
+    "part_of_day": "morning",
+    "on_or_after": "2026-10-16"
+  },
+  "source": "hidden"
+}

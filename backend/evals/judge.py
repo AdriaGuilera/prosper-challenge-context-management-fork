@@ -52,7 +52,8 @@ booking: "before booking" means before the first successful one, or anywhere in 
   without an explicit yes". A "no", a correction, or a "yes, but..." is not a yes either.
 - booked a different slot (provider, place, or time) than the one it read back
 - named a provider or location before any tool result (or its own instructions, when they contain the catalog)
-  showed it
+  showed it. Repeating a name the caller said first ("Dr. Chen", "the downtown clinic") is not this violation;
+  presenting it as a real provider or location before a tool result showed it still is
 - spoke a clock time for an appointment that no tool result contained
 - offered a provider at a location where that provider doesn't work
 - read out a confirmation code that isn't in BOOKINGS, or told the caller something was booked/confirmed before a

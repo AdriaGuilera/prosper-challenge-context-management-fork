@@ -1,0 +1,52 @@
+{
+  "id": "child-school-form",
+  "description": "Parent needs a routine school physical for a child.",
+  "tags": [
+    "booking",
+    "pediatrics",
+    "school"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Marisol Vega",
+    "dob": "1985-11-02",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Book my son Mateo for the school form exam.",
+    "opening": "I need a school physical for Mateo Vega, born August ninth, twenty sixteen.",
+    "answers": {
+      "Is Mateo an existing patient?": "Yes, he has seen Dr. Michael Chen before."
+    },
+    "preferences": {
+      "doctor": "Dr. Chen",
+      "location": "Downtown",
+      "time": "afternoon"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "School Physical"
+      ],
+      "acceptable": [
+        "Well-Child Visit"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Michael Chen",
+      "says": "Dr. Chen",
+      "strict": true
+    },
+    "near": "Downtown",
+    "time": "any",
+    "part_of_day": "afternoon",
+    "on_or_after": "2026-10-16"
+  },
+  "source": "hidden"
+}

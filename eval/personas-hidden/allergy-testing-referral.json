@@ -1,0 +1,52 @@
+{
+  "id": "allergy-testing-referral",
+  "description": "Existing patient with a referral requests allergy skin testing.",
+  "tags": [
+    "booking",
+    "allergy",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Devika Nair",
+    "dob": "1980-04-27",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "Allergy Skin Testing"
+      ]
+    },
+    "goal": "Schedule the allergy scratch testing my doctor ordered.",
+    "opening": "My primary care doctor sent a referral for allergy skin testing because of my spring reactions.",
+    "answers": {
+      "Is the referral specifically for testing?": "Yes, it says skin testing."
+    },
+    "preferences": {
+      "language": "Hindi",
+      "location": "North Gate"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Allergy Skin Testing"
+      ],
+      "acceptable": [
+        "Allergy Consultation"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Olivia Martinez",
+      "says": "Dr. Martinez",
+      "strict": false
+    },
+    "near": "North Gate",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

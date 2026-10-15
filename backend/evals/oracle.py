@@ -228,13 +228,16 @@ def compute_oracle(persona: dict, bundle: Bundle, anchor: date, clock: datetime)
             o.target = _target(bundle, options, o, soonest_matters)
 
     # "visit:A|B": the caller's words fit several visits, so the agent must ask which one;
-    # only where at least two of them are offered here
-    for ask in exp.get("must_ask", []):
+    # only where at least two of them are offered here. A persona lists it only when a
+    # wrong pick is a different procedure or body part (MRI brain vs spine); when either
+    # visit meets the need, it gives both tiers instead and asking is optional.
+    # Every ask narrows a booking, so none is required when no booking is possible.
+    for ask in exp.get("must_ask", []) if o.outcome == "booking" else []:
         if ask.startswith("visit:"):
             names = ask.split(":", 1)[1].split("|")
             members = {i for n in names for i in ids_by_name.get(normalize(n), [])}
             offered = {tr[2] for tr in structural}
-            if len(members & offered) >= 2 and o.outcome == "booking":
+            if len(members & offered) >= 2:
                 o.must_ask.append(ask)
                 o.ask_labels[ask] = [n.lower() for n in names]
         elif ask == "place":

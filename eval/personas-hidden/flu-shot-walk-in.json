@@ -1,0 +1,44 @@
+{
+  "id": "flu-shot-walk-in",
+  "description": "Caller wants a routine flu vaccination.",
+  "tags": [
+    "booking",
+    "vaccine",
+    "new-patient"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Derek Huang",
+    "dob": "1988-06-30",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Schedule a flu shot for me.",
+    "opening": "Can I come in for my flu vaccine Friday morning?",
+    "answers": {},
+    "preferences": {
+      "location": "Mission Bay",
+      "time": "Friday morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Flu Shot"
+      ],
+      "acceptable": [
+        "Vaccination / Immunization"
+      ],
+      "suboptimal": []
+    },
+    "near": "Mission Bay",
+    "time": "any",
+    "part_of_day": "morning",
+    "on_or_after": "2026-10-16"
+  },
+  "source": "hidden"
+}

@@ -1,0 +1,50 @@
+{
+  "id": "travel-shots-portuguese",
+  "description": "New patient seeks travel vaccination advice in Portuguese.",
+  "tags": [
+    "booking",
+    "travel",
+    "Portuguese"
+  ],
+  "behaviors": [
+    "rambler"
+  ],
+  "caller": {
+    "name": "Camila Duarte",
+    "dob": "1997-05-19",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Find out what shots I need before my trip to Brazil.",
+    "opening": "I'm leaving for Brazil in six weeks and my aunt keeps telling me I need every vaccine imaginable.",
+    "answers": {
+      "When are you leaving?": "November twenty-eighth."
+    },
+    "preferences": {
+      "language": "Portuguese",
+      "location": "Midtown"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Travel Vaccination Consult"
+      ],
+      "acceptable": [],
+      "suboptimal": [
+        "Vaccination / Immunization"
+      ]
+    },
+    "provider": {
+      "name": "Priya Ramirez",
+      "says": "Dr. Ramirez",
+      "strict": false
+    },
+    "near": "Midtown",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

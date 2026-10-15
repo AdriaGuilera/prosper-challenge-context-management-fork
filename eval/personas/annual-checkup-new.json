@@ -1,6 +1,6 @@
 {
   "id": "annual-checkup-new",
-  "description": "New patient asks for an annual checkup; physical vs wellness is unqueryable.",
+  "description": "New patient asks for an annual checkup. Annual Physical and Annual Wellness Visit both meet it, so asking or booking either passes.",
   "tags": [
     "lookalike",
     "gate:new-patient"
@@ -29,13 +29,10 @@
       "ideal": [
         "Annual Physical"
       ],
-      "suboptimal": [
+      "acceptable": [
         "Annual Wellness Visit"
       ]
     },
-    "must_ask": [
-      "visit:Annual Physical|Annual Wellness Visit"
-    ],
     "time": "soonest"
   }
 }

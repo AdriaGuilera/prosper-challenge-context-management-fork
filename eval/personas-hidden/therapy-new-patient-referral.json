@@ -1,0 +1,51 @@
+{
+  "id": "therapy-new-patient-referral",
+  "description": "New patient has a referral for psychiatric evaluation and prefers Spanish.",
+  "tags": [
+    "booking",
+    "psychiatry",
+    "referral",
+    "Spanish"
+  ],
+  "behaviors": [
+    "vague"
+  ],
+  "caller": {
+    "name": "Rafael Torres",
+    "dob": "1982-03-11",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Psychiatric Evaluation"
+      ]
+    },
+    "goal": "Get help for anxiety and talk with somebody in Spanish.",
+    "opening": "My anxiety is getting hard to manage and my doctor said to call you.",
+    "answers": {
+      "Did your doctor send a referral?": "Yes, for an evaluation, and I would really prefer Spanish."
+    },
+    "preferences": {
+      "language": "Spanish",
+      "location": "Mission District"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Psychiatric Evaluation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Wei Smith",
+      "says": "Dr. Smith",
+      "strict": false
+    },
+    "near": "Mission District",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

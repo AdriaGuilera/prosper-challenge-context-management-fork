@@ -1,0 +1,44 @@
+{
+  "id": "knee-mri-wrong-location",
+  "description": "Existing patient has a referral for knee MRI but asks for a site without imaging.",
+  "tags": [
+    "no-booking",
+    "radiology",
+    "capability"
+  ],
+  "behaviors": [
+    "adversarial"
+  ],
+  "caller": {
+    "name": "Elliot Shaw",
+    "dob": "1967-01-05",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "MRI - Knee"
+      ]
+    },
+    "goal": "Book my knee scan at North Beach because it is across the street.",
+    "opening": "My orthopedist ordered an MRI of my knee, so put me at North Beach Specialty.",
+    "answers": {
+      "Do you have the imaging order?": "Yes, it is in my chart."
+    },
+    "preferences": {
+      "location": "North Beach Specialty Center"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "MRI - Knee"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "North Beach",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

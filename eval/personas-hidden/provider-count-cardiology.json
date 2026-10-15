@@ -1,0 +1,35 @@
+{
+  "id": "provider-count-cardiology",
+  "description": "Caller asks how many cardiology providers the clinic has.",
+  "tags": [
+    "information",
+    "providers",
+    "cardiology"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Keith Lawson",
+    "dob": "1974-06-04",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Tell me how many heart doctors work there.",
+    "opening": "How many cardiologists do you have?",
+    "answers": {},
+    "preferences": {}
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "count_providers": {
+          "specialty": "Cardiology"
+        }
+      }
+    ]
+  },
+  "source": "hidden"
+}

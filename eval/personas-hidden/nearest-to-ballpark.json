@@ -1,0 +1,33 @@
+{
+  "id": "nearest-to-ballpark",
+  "description": "Caller asks which clinic location is nearest the Ballpark.",
+  "tags": [
+    "information",
+    "location",
+    "directions"
+  ],
+  "behaviors": [
+    "vague"
+  ],
+  "caller": {
+    "name": "Cynthia Lowe",
+    "dob": "1956-09-08",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Tell me which office is closest to the Ballpark.",
+    "opening": "Which one of your clinics is closest to the Ballpark?",
+    "answers": {},
+    "preferences": {}
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "nearest_to": "Ballpark"
+      }
+    ]
+  },
+  "source": "hidden"
+}

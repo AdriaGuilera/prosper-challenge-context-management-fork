@@ -1,0 +1,54 @@
+{
+  "id": "sports-physical-teen",
+  "description": "Parent needs a sports clearance visit for a teenager.",
+  "tags": [
+    "booking",
+    "pediatrics",
+    "sports"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Gregory Mills",
+    "dob": "1978-12-20",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Get my daughter cleared for basketball.",
+    "opening": "Keira needs the sports form signed before basketball tryouts next week.",
+    "answers": {
+      "What is Keira's date of birth?": "March 3, 2011."
+    },
+    "preferences": {
+      "location": "Market St",
+      "time": "after school"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Sports Physical"
+      ],
+      "acceptable": [
+        "School Physical",
+        "Well-Child Visit"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Michael Chen",
+      "says": "Dr. Michael Chen",
+      "strict": false
+    },
+    "time": "soonest",
+    "part_of_day": "afternoon",
+    "on_or_after": "2026-10-15",
+    "must_ask": [
+      "place"
+    ]
+  },
+  "source": "hidden"
+}

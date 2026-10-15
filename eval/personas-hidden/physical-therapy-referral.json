@@ -1,0 +1,44 @@
+{
+  "id": "physical-therapy-referral",
+  "description": "New patient with a PT referral seeks care close to Mission.",
+  "tags": [
+    "booking",
+    "physical-therapy",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Damon Riley",
+    "dob": "1989-02-28",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Physical Therapy Evaluation"
+      ]
+    },
+    "goal": "Start therapy for my sore shoulder after a bike crash.",
+    "opening": "My orthopedist sent over a therapy referral for my shoulder.",
+    "answers": {
+      "Is this your first physical therapy visit here?": "Yes, and the referral should have been faxed today."
+    },
+    "preferences": {
+      "location": "Mission District"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Physical Therapy Evaluation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Mission District",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

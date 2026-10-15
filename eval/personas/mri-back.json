@@ -1,6 +1,6 @@
 {
   "id": "mri-back",
-  "description": "'An MRI' without saying which part; it fits every MRI, so the agent must ask which one.",
+  "description": "'An MRI' without saying which part. Each MRI scans a different body part, so a wrong pick is a wrong booking: the agent must ask which one.",
   "tags": [
     "lookalike",
     "gate:capability"

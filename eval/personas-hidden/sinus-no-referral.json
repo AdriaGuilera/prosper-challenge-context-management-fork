@@ -1,0 +1,46 @@
+{
+  "id": "sinus-no-referral",
+  "description": "New patient seeks specialty sinus evaluation without a required referral.",
+  "tags": [
+    "no-booking",
+    "ent",
+    "missing-referral"
+  ],
+  "behaviors": [
+    "rambler"
+  ],
+  "caller": {
+    "name": "Owen Daley",
+    "dob": "1987-03-09",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "See someone about sinus infections I keep getting.",
+    "opening": "Every month or so my face hurts and I get congested again, and antibiotics never seem to fix it for long.",
+    "answers": {
+      "Has a clinician referred you to ENT?": "No, I just figured I should see an ear-nose-throat doctor."
+    },
+    "preferences": {
+      "location": "Midtown"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Sinus Evaluation"
+      ],
+      "acceptable": [
+        "ENT Consultation"
+      ],
+      "suboptimal": [
+        "Sick Visit"
+      ]
+    },
+    "near": "Midtown",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

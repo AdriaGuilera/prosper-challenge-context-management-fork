@@ -1,0 +1,51 @@
+{
+  "id": "baby-newborn",
+  "description": "Parent schedules a newborn visit for an infant.",
+  "tags": [
+    "booking",
+    "pediatrics",
+    "newborn"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Elena Brooks",
+    "dob": "1993-10-31",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Make the baby's first checkup appointment.",
+    "opening": "My daughter Ivy was born on October twelfth and the hospital said she needs her first doctor visit.",
+    "answers": {
+      "What is the child's date of birth?": "October 12, 2026."
+    },
+    "preferences": {
+      "location": "Mission Bay",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Newborn Visit"
+      ],
+      "acceptable": [
+        "Well-Child Visit"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Maria Garcia",
+      "says": "Dr. Garcia",
+      "strict": false
+    },
+    "near": "Mission Bay",
+    "time": "soonest",
+    "part_of_day": "morning",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

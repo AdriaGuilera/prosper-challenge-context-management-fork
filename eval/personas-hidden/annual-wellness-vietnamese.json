@@ -1,0 +1,50 @@
+{
+  "id": "annual-wellness-vietnamese",
+  "description": "Existing patient requests an annual wellness visit with a Vietnamese-speaking internist.",
+  "tags": [
+    "booking",
+    "annual",
+    "Vietnamese"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Thanh Pham",
+    "dob": "1951-08-26",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Book my yearly checkup with someone who speaks Vietnamese.",
+    "opening": "It is time for my Medicare yearly visit, and Vietnamese would make it easier.",
+    "answers": {},
+    "preferences": {
+      "language": "Vietnamese",
+      "location": "North Gate",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Annual Wellness Visit"
+      ],
+      "acceptable": [
+        "Annual Physical"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "David Johnson",
+      "says": "Dr. Johnson",
+      "strict": false
+    },
+    "near": "North Gate",
+    "time": "any",
+    "part_of_day": "morning",
+    "on_or_after": "2026-10-20"
+  },
+  "source": "hidden"
+}

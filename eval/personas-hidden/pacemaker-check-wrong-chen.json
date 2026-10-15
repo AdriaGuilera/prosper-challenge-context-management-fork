@@ -1,0 +1,51 @@
+{
+  "id": "pacemaker-check-wrong-chen",
+  "description": "Existing patient confuses the dermatologist with the cardiologist while requesting a pacemaker check.",
+  "tags": [
+    "booking",
+    "cardiology",
+    "name-confusion",
+    "referral"
+  ],
+  "behaviors": [
+    "correction-hunter"
+  ],
+  "caller": {
+    "name": "Norman Ellis",
+    "dob": "1942-01-24",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "Pacemaker Check"
+      ]
+    },
+    "goal": "Get my pacemaker checked with Dr. Chen.",
+    "opening": "I need my pacemaker checked by Dr. Chen, the heart one, not the skin doctor.",
+    "answers": {
+      "Which Dr. Chen do you mean?": "David Chen, my cardiologist."
+    },
+    "preferences": {
+      "doctor": "Dr. Chen",
+      "location": "Mission District"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Pacemaker Check"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "David Chen",
+      "says": "Dr. Chen",
+      "strict": true
+    },
+    "near": "Mission District",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

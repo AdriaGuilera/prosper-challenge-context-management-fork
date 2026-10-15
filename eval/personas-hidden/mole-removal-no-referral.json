@@ -1,0 +1,50 @@
+{
+  "id": "mole-removal-no-referral",
+  "description": "Existing patient requests a procedure without the required referral.",
+  "tags": [
+    "no-booking",
+    "dermatology",
+    "missing-referral"
+  ],
+  "behaviors": [
+    "correction-hunter"
+  ],
+  "caller": {
+    "name": "Jonah Price",
+    "dob": "1976-09-14",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Get this raised mole taken off as soon as you can.",
+    "opening": "Dr. Daniel Smith looked at my mole before, and now I just want it removed.",
+    "answers": {
+      "Do you have a procedure referral from a clinician?": "No, but he already knows what it looks like."
+    },
+    "preferences": {
+      "doctor": "Daniel Smith",
+      "location": "Richmond"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Mole Removal"
+      ],
+      "acceptable": [],
+      "suboptimal": [
+        "Dermatology Consultation"
+      ]
+    },
+    "provider": {
+      "name": "Daniel Smith",
+      "says": "Dr. Smith",
+      "strict": true
+    },
+    "near": "Richmond",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

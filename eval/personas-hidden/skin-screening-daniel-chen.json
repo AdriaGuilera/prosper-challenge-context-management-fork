@@ -1,0 +1,51 @@
+{
+  "id": "skin-screening-daniel-chen",
+  "description": "New patient requests a skin cancer screening with a named dermatologist.",
+  "tags": [
+    "booking",
+    "dermatology",
+    "provider"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Hassan Al-Masri",
+    "dob": "1962-11-09",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Book a check of all my spots with Dr. Daniel Chen.",
+    "opening": "My wife says the sun spots on my back need a proper skin cancer check, preferably with Daniel Chen.",
+    "answers": {},
+    "preferences": {
+      "doctor": "Daniel Chen",
+      "location": "Downtown",
+      "time": "afternoon"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Skin Cancer Screening",
+        "Full Body Skin Exam"
+      ],
+      "acceptable": [
+        "Dermatology Consultation"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Daniel Chen",
+      "says": "Daniel Chen",
+      "strict": true
+    },
+    "near": "Downtown",
+    "time": "any",
+    "part_of_day": "afternoon",
+    "on_or_after": "2026-10-19"
+  },
+  "source": "hidden"
+}

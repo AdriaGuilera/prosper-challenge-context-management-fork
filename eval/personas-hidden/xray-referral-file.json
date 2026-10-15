@@ -1,0 +1,51 @@
+{
+  "id": "xray-referral-file",
+  "description": "Existing patient has an X-ray referral and requests an imaging-capable site.",
+  "tags": [
+    "booking",
+    "xray",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Irene Wallace",
+    "dob": "1955-03-16",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "X-Ray"
+      ]
+    },
+    "goal": "Schedule the chest X-ray my doctor ordered.",
+    "opening": "My primary doctor ordered a chest X-ray and said the order was sent electronically.",
+    "answers": {
+      "Do you have an imaging order?": "Yes, it is from Dr. Patel's office."
+    },
+    "preferences": {
+      "location": "Midtown",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "X-Ray"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Hannah Nguyen",
+      "says": "Dr. Nguyen",
+      "strict": false
+    },
+    "near": "Midtown",
+    "time": "soonest",
+    "part_of_day": "morning",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

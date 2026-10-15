@@ -1,0 +1,53 @@
+{
+  "id": "colon-consult-referral",
+  "description": "New patient has a referral for a colonoscopy consultation.",
+  "tags": [
+    "booking",
+    "gastroenterology",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Harold Stein",
+    "dob": "1954-05-11",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Colonoscopy Consultation"
+      ]
+    },
+    "goal": "Book the consultation before my screening colonoscopy.",
+    "opening": "My family doctor sent a referral for me to talk with someone about a colonoscopy.",
+    "answers": {
+      "Do you have a referral?": "Yes, it was sent from Cedar Hill Family Practice."
+    },
+    "preferences": {
+      "location": "North Gate",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Colonoscopy Consultation"
+      ],
+      "acceptable": [
+        "GI Consultation"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Fatima Hernandez",
+      "says": "Dr. Hernandez",
+      "strict": false
+    },
+    "near": "North Gate",
+    "time": "soonest",
+    "part_of_day": "morning",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

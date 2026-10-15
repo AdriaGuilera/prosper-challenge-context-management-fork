@@ -1,0 +1,49 @@
+{
+  "id": "mammogram-routine",
+  "description": "New patient requests a routine screening mammogram.",
+  "tags": [
+    "booking",
+    "radiology",
+    "screening"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Yvonne Clarke",
+    "dob": "1972-02-15",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Schedule my regular mammogram.",
+    "opening": "I'm due for my yearly mammogram and would like to get it on the calendar.",
+    "answers": {
+      "Is this a routine screening mammogram?": "Yes, no symptoms and no unusual findings."
+    },
+    "preferences": {
+      "location": "Downtown",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Mammogram"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Linda Ramirez",
+      "says": "Dr. Ramirez",
+      "strict": false
+    },
+    "near": "Downtown",
+    "time": "any",
+    "part_of_day": "morning",
+    "on_or_after": "2026-10-22"
+  },
+  "source": "hidden"
+}

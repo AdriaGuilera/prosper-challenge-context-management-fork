@@ -1,0 +1,50 @@
+{
+  "id": "prenatal-first-visit",
+  "description": "Newly pregnant patient seeks prenatal care near Downtown.",
+  "tags": [
+    "booking",
+    "obgyn",
+    "prenatal"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Nora Ibrahim",
+    "dob": "1994-12-07",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Start prenatal care because I just found out I am pregnant.",
+    "opening": "I had a positive test this week and I think I'm about seven weeks along.",
+    "answers": {
+      "Have you had prenatal care for this pregnancy?": "No, this would be my first visit."
+    },
+    "preferences": {
+      "location": "Downtown",
+      "language": "Hindi if available"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Prenatal Visit"
+      ],
+      "acceptable": [
+        "OB/GYN New Patient Visit"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Linda Nguyen",
+      "says": "Dr. Nguyen",
+      "strict": false
+    },
+    "near": "Downtown",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}

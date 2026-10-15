@@ -1,6 +1,6 @@
 {
   "id": "skin-check-one-spot",
-  "description": "Says 'skin check'; the real need is one changed mole, which it shares with a full skin exam.",
+  "description": "Says 'skin check' about one changed mole. Skin Cancer Screening and Full Body Skin Exam both look at it, so asking or booking either passes.",
   "tags": [
     "lookalike",
     "ambiguity"
@@ -30,12 +30,9 @@
       "ideal": [
         "Skin Cancer Screening"
       ],
-      "suboptimal": [
+      "acceptable": [
         "Full Body Skin Exam"
       ]
-    },
-    "must_ask": [
-      "visit:Skin Cancer Screening|Full Body Skin Exam"
-    ]
+    }
   }
 }

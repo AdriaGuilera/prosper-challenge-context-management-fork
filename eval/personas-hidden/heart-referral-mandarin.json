@@ -1,0 +1,51 @@
+{
+  "id": "heart-referral-mandarin",
+  "description": "New patient with a cardiology referral requests a Mandarin-speaking clinician.",
+  "tags": [
+    "booking",
+    "referral",
+    "cardiology",
+    "language"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Guo Lin",
+    "dob": "1958-02-23",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Cardiology Consultation"
+      ]
+    },
+    "goal": "Set up the heart specialist appointment my primary doctor referred me for.",
+    "opening": "My doctor sent a referral because I've been getting pressure in my chest when I walk uphill.",
+    "answers": {
+      "Do you have a referral on file?": "Yes, it was sent yesterday from Dr. Wong's office."
+    },
+    "preferences": {
+      "language": "Mandarin",
+      "location": "near City Hall"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Cardiology Consultation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Emily Chen",
+      "says": "Dr. Emily Chen",
+      "strict": false
+    },
+    "near": "City Hall",
+    "time": "soonest",
+    "on_or_after": "2026-10-15"
+  },
+  "source": "hidden"
+}
