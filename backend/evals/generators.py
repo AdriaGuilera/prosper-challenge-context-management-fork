@@ -50,7 +50,7 @@ class _Gen:
         return self.types[type_id]["name"].lower()
 
     def place_of(self, loc_id: str) -> str:
-        return self.b.places[loc_id]["place"] or self.locations[loc_id]["name"]
+        return self.b.places[loc_id]["place"]
 
     def add(self, kind: str, desc: str, tags: list, caller: dict, expect: dict, behavior: str = None):
         pid = f"gen-{kind}-{sum(1 for p in self.out if p['id'].startswith(f'gen-{kind}-')) + 1}"

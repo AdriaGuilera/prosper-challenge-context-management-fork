@@ -36,7 +36,7 @@ class Bundle:
     path: Path
     catalog: dict
     version: str
-    places: dict = field(default_factory=dict)       # loc id -> {"place": area | None, "at": [x, y]}
+    places: dict = field(default_factory=dict)       # loc id -> {"place": area, "at": [x, y]}
     patients: list = field(default_factory=list)
     calendar: dict = field(default_factory=dict)
     gazetteer: dict = field(default_factory=dict)
@@ -81,26 +81,20 @@ def _made_up(key: str, span: float) -> float:
 def place_locations(catalog: dict, gazetteer: dict) -> dict:
     """location id -> {"place", "at"}. The place is the longest area named in the location's
     name. The first location in an area sits on its point, later ones up to 1 km away so
-    "nearest" can tell them apart. A name with no area gets a made-up point within 3 km of
-    the middle of the map."""
+    "nearest" can tell them apart."""
     areas = {normalize(p["name"]): p for p in gazetteer["places"] if p["kind"] != "street"}
-    xs = sorted(x for p in areas.values() for x, _ in p["points"])
-    ys = sorted(y for p in areas.values() for _, y in p["points"])
-    mid = xs[len(xs) // 2], ys[len(ys) // 2]
     out, taken = {}, set()
     for l in catalog["locations"]:
         name = f" {normalize(l['name'])} "
         hits = [a for a in areas if f" {a} " in name]
-        if hits:
-            area = areas[max(hits, key=len)]
-            x, y = area["points"][0]
-            if area["name"] in taken:
-                x, y = x + _made_up(l["id"] + "x", 1), y + _made_up(l["id"] + "y", 1)
-            taken.add(area["name"])
-            out[l["id"]] = {"place": area["name"], "at": [round(x, 1), round(y, 1)]}
-        else:
-            out[l["id"]] = {"place": None, "at": [round(mid[0] + _made_up(l["id"] + "x", 3), 1),
-                                                   round(mid[1] + _made_up(l["id"] + "y", 3), 1)]}
+        if not hits:
+            raise ValueError(f"Location {l['id']} '{l['name']}' names no gazetteer area: put one in its name.")
+        area = areas[max(hits, key=len)]
+        x, y = area["points"][0]
+        if area["name"] in taken:
+            x, y = x + _made_up(l["id"] + "x", 1), y + _made_up(l["id"] + "y", 1)
+        taken.add(area["name"])
+        out[l["id"]] = {"place": area["name"], "at": [round(x, 1), round(y, 1)]}
     return out
 
 
