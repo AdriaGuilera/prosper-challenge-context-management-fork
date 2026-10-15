@@ -339,7 +339,9 @@ def _resolve_info(bundle: Bundle, item: dict) -> dict:
         return {"kind": "open_on", "day": item["open_on"], "open_locations": open_locs}
     if "location_open_on" in item:
         spec = item["location_open_on"]
-        loc = next(l for l in cat["locations"] if l["name"] == spec["location"])
+        loc = next((l for l in cat["locations"] if l["name"] == spec["location"]), None)
+        if loc is None:  # a location named in one catalog and absent here: the answer is that there's none
+            return {"kind": "location_open_on", "location": spec["location"], "day": spec["day"], "exists": False}
         day = DAY_NAMES.index(spec["day"])
         try:
             intervals = parse_hours(loc["hours"]).get(day, [])
