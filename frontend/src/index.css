@@ -1,28 +1,28 @@
-/* Bell System Practice — a working shell in Bell blue, directory-white paper,
-   one-pixel rules, and signal amber reserved for whatever is live. */
+/* Bell System Practice in Prosper's colors: a working shell in Prosper blue on warm
+   cream paper, one-pixel rules, and Prosper's signal orange reserved for whatever is live. */
 
 :root {
-  --bell: #0b5cad;
-  --bell-deep: #084a8c;
+  --bell: #095580;
+  --bell-deep: #013653;
   --bell-ink: #ffffff;
-  --bell-ink-2: #c9dcf2;
-  --bell-rule: #2c74bd;
+  --bell-ink-2: #c4dbe8;
+  --bell-rule: #2a6f96;
 
-  --paper: #f3f5f6;
-  --sheet: #ffffff;
-  --ink: #14181f;
-  --ink-2: #4a5260;
-  --ink-3: #6b7380;
-  --rule: #c8cdd3;
-  --rule-strong: #8e96a1;
-  --grid: #e5e9ec;
+  --paper: #f9f4ec;
+  --sheet: #fef9f1;
+  --ink: #141414;
+  --ink-2: #514b45;
+  --ink-3: #676059;
+  --rule: #dcd5ca;
+  --rule-strong: #a39b90;
+  --grid: #efeae2;
 
-  --signal: #f2a900;
-  --signal-ink: #7a5200;
-  --signal-soft: #fdf1cf;
-  --spent: #b98a1c;
-  --fail: #b3261e;
-  --fail-soft: #fbe9e7;
+  --signal: #ff421c;
+  --signal-ink: #b52a0b;
+  --signal-soft: #ffe6dd;
+  --spent: #136f6d;
+  --fail: #a1122a;
+  --fail-soft: #fbe4e8;
 
   --sans: 'Archivo Variable', 'Archivo', system-ui, sans-serif;
   --mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace;
@@ -118,9 +118,9 @@ input, textarea { caret-color: var(--bell); }
   font-size: 15px;
   transition: background-color 160ms ease-out, color 160ms ease-out;
 }
-.call-btn:hover:not(:disabled) { background: #ffbf1f; }
+.call-btn:hover:not(:disabled) { background: #ff6a4a; }
 .call-btn[data-live] { background: var(--bell-deep); color: var(--bell-ink); border-color: var(--signal); }
-.call-btn[data-live]:hover { background: #063a6e; }
+.call-btn[data-live]:hover { background: #012a42; }
 .call-btn:disabled { background: transparent; border-color: var(--bell-rule); color: var(--bell-ink-2); }
 .rail__hint { font-size: 12px; color: var(--bell-ink-2); margin-top: -12px; }
 
@@ -403,7 +403,7 @@ input[type='checkbox'] { accent-color: var(--bell); width: 15px; height: 15px; m
 .call__head[data-status='connecting'] .lamp { border-color: var(--signal); border-style: dashed; }
 .call__head[data-status='ended'] .lamp { background: var(--spent); border-color: var(--spent); }
 .call__head[data-status='error'] .lamp { background: var(--fail); border-color: var(--fail); }
-@keyframes lamp-breathe { 50% { background: #ffd666; } }
+@keyframes lamp-breathe { 50% { background: #ff8a6e; } }
 
 .call__error {
   display: flex; gap: 8px; align-items: flex-start;
