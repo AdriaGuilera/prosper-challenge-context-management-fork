@@ -224,7 +224,7 @@ input, textarea { caret-color: var(--bell); }
 .mark--end { border-color: var(--ink-2); color: var(--ink-2); }
 
 .circuit__task {
-  padding: 8px 10px 10px;
+  margin: 8px 10px 10px; /* margin, not padding: the clamp clips at the padding edge, so padding shows the 4th line */
   font-size: 12.5px; line-height: 1.4; color: var(--ink-2);
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
