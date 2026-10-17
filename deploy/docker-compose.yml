@@ -25,6 +25,11 @@ services:
       DATABASE_URL: postgresql://prosper:prosper@127.0.0.1:5433/prosper
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      # Call traces (monitoring.py); tracing is off if these are empty.
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-https://cloud.langfuse.com}
+      ENVIRONMENT: production
       # Bind HTTP to the docker0 bridge only: Traefik reaches it there, the internet doesn't.
       HOST: 172.17.0.1
     depends_on:

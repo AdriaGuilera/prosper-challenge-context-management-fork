@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional, Union
 
 from loguru import logger
+from opentelemetry import trace
 from pipecat_flows import FlowManager, FlowsFunctionSchema, NodeConfig
 
 from .schema import AgentConfig, Edge, Node
@@ -22,6 +23,13 @@ from .tools import TOOLS, ToolContext, result_size, run_tool, schema_properties
 
 # Call events for the builder UI: node_entered, edge_taken, tool_started, tool_finished.
 EventSink = Callable[[dict], Awaitable[None]]
+
+# Edge and tool spans for the call trace (a no-op unless monitoring.setup_tracing ran).
+tracer = trace.get_tracer("agent_builder")
+
+
+def _json(value) -> str:
+    return json.dumps(value, default=str)
 
 
 class AgentBuilder:
@@ -112,6 +120,9 @@ class AgentBuilder:
             # Persist what the caller gave us so later nodes can use it.
             flow_manager.state.update(args)
             logger.info(f"[{edge.function}] -> {edge.target} | collected: {args}")
+            with tracer.start_as_current_span(f"edge {edge.function}") as span:
+                span.set_attribute("langfuse.observation.input", _json(args))
+                span.set_attribute("langfuse.observation.output", _json({"from": node.name, "to": edge.target}))
             await self._event(
                 "edge_taken",
                 source=node.name,
@@ -150,11 +161,16 @@ class AgentBuilder:
                 "tool_started", id=call_id, node=node.name, tool=name, args=args
             )
             started = time.perf_counter()
-            try:
-                result = await run_tool(name, args, self.ctx)
-            except Exception as e:  # a broken lookup must not end the call
-                logger.exception(f"[{name}] failed")
-                result = {"error": str(e)}
+            with tracer.start_as_current_span(f"tool {name}") as span:
+                span.set_attribute("langfuse.observation.input", _json(args))
+                span.set_attribute("node", node.name)
+                try:
+                    result = await run_tool(name, args, self.ctx)
+                except Exception as e:  # a broken lookup must not end the call
+                    logger.exception(f"[{name}] failed")
+                    result = {"error": str(e)}
+                    span.set_attribute("langfuse.observation.level", "ERROR")
+                span.set_attribute("langfuse.observation.output", _json(result))
             ms = round((time.perf_counter() - started) * 1000, 2)
             logger.info(f"[{name}] {ms}ms | args: {args}")
             await self._event(
