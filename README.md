@@ -38,6 +38,7 @@ Remember to update the `.env` file accordingly.
 | `backend/agents/` | Agents **as data**. `clinic-scheduler.json` uses the catalog tools; `example-flow.json` is the original sample. |
 | `frontend/` | The builder UI: graph editor, inspector, and live test-call panel. |
 | `docs/` | `task.md` (the challenge), `eval/results.md` (what the eval measured), and `PRODUCT.md`. |
+| `Dockerfile`, `deploy/` | The hosted demo at `prosper-challenge.adriaguilera.com` (basic auth), redeployed on push to `main`. See [`deploy/README.md`](deploy/README.md). |
 | `backend/data/catalog.json` | A deliberately large, deliberately messy clinic catalog (locations, providers, appointment types, booking rules) for the Phase 2 work. See [`backend/data/README.md`](backend/data/README.md). |
 
 ## The store and the eval (Phase 2)
