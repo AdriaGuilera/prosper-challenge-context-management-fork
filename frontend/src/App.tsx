@@ -7,6 +7,7 @@ import { Inspector } from './Inspector'
 import { CallPanel } from './CallPanel'
 import { useCall } from './useCall'
 import { validate } from './validate'
+import prosperLogo from './assets/prosper-logo.svg'
 import type { Agent, AgentNode, AgentSummary, Edge, Selection, ToolInfo } from './types'
 
 const BLANK_AGENT: Agent = {
@@ -208,8 +209,7 @@ export default function App() {
     <div className="shell" data-call={trace.status}>
       <nav className="rail" aria-label="Agents">
         <div className="brand">
-          <span className="brand__mark" aria-hidden />
-          <span className="brand__name">Prosper</span>
+          <img className="brand__logo" src={prosperLogo} alt="Prosper" />
           <span className="brand__sub">Agent builder</span>
         </div>
 

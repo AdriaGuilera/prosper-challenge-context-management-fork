@@ -89,24 +89,19 @@ input, textarea { caret-color: var(--bell); }
 }
 
 .brand {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 10px;
+  display: flex;
   align-items: center;
+  gap: 10px;
   height: var(--bar-h);
   margin: 0 -16px;
   padding: 0 16px;
   border-bottom: 1px solid var(--bell-rule);
 }
-.brand__mark {
-  grid-row: span 2;
-  width: 22px; height: 22px;
-  border: 1px solid var(--bell-ink);
-  display: grid; place-items: center;
+.brand__logo { display: block; height: 26px; width: auto; }
+.brand__sub {
+  font-size: 12px; color: var(--bell-ink-2); line-height: 1;
+  padding-left: 10px; border-left: 1px solid var(--bell-rule);
 }
-.brand__mark::after { content: ''; width: 8px; height: 8px; background: var(--signal); }
-.brand__name { font-weight: 700; font-size: 15px; letter-spacing: 0.01em; line-height: 1.1; }
-.brand__sub { font-size: 12px; color: var(--bell-ink-2); line-height: 1.1; }
 
 .call-btn {
   display: flex; align-items: center; justify-content: center; gap: 10px;
