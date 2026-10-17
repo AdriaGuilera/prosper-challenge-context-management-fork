@@ -1,0 +1,44 @@
+{
+  "id": "preop-new-patient",
+  "description": "New patient has a valid referral but the pre-operative visit is not open to new patients.",
+  "tags": [
+    "no-booking",
+    "pre-op",
+    "new-patient"
+  ],
+  "behaviors": [
+    "adversarial"
+  ],
+  "caller": {
+    "name": "Diane Alvarez",
+    "dob": "1963-07-19",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Pre-operative Evaluation"
+      ]
+    },
+    "goal": "Get you to clear me for surgery next week.",
+    "opening": "My surgeon faxed a clearance form, so I need a pre-op appointment immediately.",
+    "answers": {
+      "patient-status": "I am new to your clinic."
+    },
+    "preferences": {
+      "time": "soonest",
+      "location": "near Downtown"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Pre-operative Evaluation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Downtown",
+    "time": "soonest"
+  },
+  "source": "hidden"
+}

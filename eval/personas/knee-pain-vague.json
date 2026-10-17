@@ -1,0 +1,39 @@
+{
+  "id": "knee-pain-vague",
+  "description": "Symptom, not a service: 'my knee hurts'. Has referrals for ortho and knee MRI.",
+  "tags": [
+    "symptom",
+    "meaning-layer"
+  ],
+  "behaviors": [
+    "vague",
+    "rambler"
+  ],
+  "caller": {
+    "name": "Sam Okafor",
+    "dob": "1992-01-20",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "MRI - Knee",
+        "Orthopedic Consultation"
+      ]
+    },
+    "goal": "Your knee has been hurting for weeks after running. Your GP gave you referrals and said to see a specialist.",
+    "opening": "Hey, my knee's been killing me and my doctor said I should get it looked at.",
+    "answers": {
+      "specialist or scan": "my doctor said to see a specialist first"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Orthopedic Consultation"
+      ],
+      "acceptable": [
+        "MRI - Knee"
+      ]
+    }
+  }
+}

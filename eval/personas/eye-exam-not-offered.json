@@ -1,0 +1,30 @@
+{
+  "id": "eye-exam-not-offered",
+  "description": "Asks for an eye exam: no provider offers any eye type.",
+  "tags": [
+    "orphan",
+    "refusal"
+  ],
+  "behaviors": [
+    "rambler",
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Grace Kim",
+    "dob": "1958-11-03",
+    "record": {
+      "existing": true
+    },
+    "goal": "Get your eyes checked; your glasses feel weak. You only want this today: if it can't be booked, don't book something else instead.",
+    "opening": "Do you do eye exams? I need my eyes checked."
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Eye Exam",
+        "Comprehensive Eye Exam"
+      ]
+    }
+  }
+}

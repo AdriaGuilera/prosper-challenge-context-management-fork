@@ -1,0 +1,50 @@
+{
+  "id": "cardiology-referral-dr-ramirez",
+  "description": "New patient with a cardiology referral requests a named cardiologist.",
+  "tags": [
+    "booking",
+    "referral",
+    "cardiology"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Rajiv Mehta",
+    "dob": "1960-02-14",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Cardiology Consultation"
+      ]
+    },
+    "goal": "Set you up with Dr. Linda Ramirez for the heart referral my primary doctor sent.",
+    "opening": "My doctor sent over a referral for my irregular heartbeat, and I'd like Dr. Ramirez if possible.",
+    "answers": {
+      "referral": "Yes, it was sent this morning by Dr. Patel's office."
+    },
+    "preferences": {
+      "doctor": "Dr. Linda Ramirez",
+      "location": "near Midtown",
+      "time": "afternoon"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Cardiology Consultation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Linda Ramirez",
+      "says": "Dr. Ramirez",
+      "strict": true
+    },
+    "near": "Midtown",
+    "part_of_day": "afternoon"
+  },
+  "source": "hidden"
+}

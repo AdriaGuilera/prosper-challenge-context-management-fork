@@ -9,18 +9,22 @@ Voice AI for healthcare scheduling. An agent is a **graph of nodes** (Pipecat Fl
 browser mic  ->  ElevenLabs STT  ->  OpenAI LLM  ->  ElevenLabs TTS  ->  browser
 ```
 
-Pipecat's dev runner ships a **prebuilt browser client**, so the test-call UI comes for free — no frontend code to write yet.
+The **agent builder** (`frontend/`, React + React Flow) edits the node graph and places a test call in the same workspace: during the call the graph lights up along the path the conversation takes, and a side panel streams the transcript and every catalog tool call.
 
 ## Quickstart
 
-Requires **Python 3.11+**. Run from the repo root:
+Requires **Python 3.11+** and **Node 20+**. Run from the repo root:
 
 ```bash
 make install
+make db-up                  # Postgres 17 + pgvector + PostGIS in Docker, on localhost:5433
+make ingest ANCHOR=today    # load the catalog; the mocked calendar starts this week
 make run
 ```
 
-Open the URL it prints (default `http://localhost:7860/client`), click **Connect**, allow mic access, and talk to the agent. `Ctrl+C` to stop. (`make help` lists all targets.)\
+Docker is required for the store. `make db-reset` wipes it and re-ingests every catalog under `backend/catalogs/`.
+
+Open `http://localhost:7860`, pick an agent, press **Test call**, allow mic access, and talk to it. `Ctrl+C` to stop. For frontend work, `make dev` runs the backend plus the Vite dev server on `http://localhost:5173`. (`make help` lists all targets.) The original prebuilt client is still at `/client`.\
 \
 Remember to update the `.env` file accordingly.
 
@@ -28,9 +32,31 @@ Remember to update the `.env` file accordingly.
 
 | Path | Responsibility |
 | --- | --- |
-| `backend/bot.py` | The voice pipeline (WebRTC + ElevenLabs STT/TTS + OpenAI LLM). Loads an agent JSON via `AgentBuilder` and runs it. No graph logic lives here. |
-| `backend/agent_builder/` | All agent-building code. `schema.py` = the declarative `AgentConfig` / `Node` / `Edge` contract; `builder.py` = `AgentBuilder`, which loads + validates the JSON and compiles it into a Pipecat Flows graph. |
-| `backend/example_flow.json` | The example agent **as data** — a clinic scheduler. The starting point for the Phase 2 context-management work. |
+| `backend/bot.py` | The voice pipeline (WebRTC + ElevenLabs STT/TTS + OpenAI LLM). Runs the agent named in the call's `/start` body, streams graph events to the UI over RTVI, and serves the built UI and the agents API. No graph logic lives here. |
+| `backend/agent_builder/` | All agent-building code. `schema.py` = the declarative `AgentConfig` / `Node` / `Edge` contract (plus per-node `tools` and editor-only `ui`); `builder.py` = `AgentBuilder`, which validates the JSON, compiles it into a Pipecat Flows graph and emits call events; `tools.py` = the catalog lookups a node can expose. |
+| `backend/monitoring.py` | Call monitoring: each call is one OpenTelemetry trace in Langfuse (turns, STT / LLM / TTS with tokens and cost, and every node transition and catalog tool call with its input and output). Off when the `LANGFUSE_*` keys are missing. |
+| `backend/agents_api.py` | List / load / save agent JSON for the UI. A save is rejected unless `AgentBuilder` can compile it. |
+| `backend/agents/` | Agents **as data**. `clinic-scheduler.json` uses the catalog tools; `example-flow.json` is the original sample. |
+| `frontend/` | The builder UI: graph editor, inspector, and live test-call panel. |
+| `docs/` | `task.md` (the challenge), `eval/results.md` (what the eval measured), and `PRODUCT.md`. |
+| `Dockerfile`, `deploy/` | The hosted demo at `prosper-challenge.adriaguilera.com` (basic auth), redeployed on push to `main`. See [`deploy/README.md`](deploy/README.md). |
 | `backend/data/catalog.json` | A deliberately large, deliberately messy clinic catalog (locations, providers, appointment types, booking rules) for the Phase 2 work. See [`backend/data/README.md`](backend/data/README.md). |
 
-To run a different agent, point `AGENT_FLOW` in `bot.py` at another JSON file.
+## The store and the eval (Phase 2)
+
+| Path | Responsibility |
+| --- | --- |
+| `backend/store/` | The Postgres store: `schema.sql` (normalised tables), `ingest.py` (refuses a payload whose ids don't resolve), `policies.py` (one function per booking policy, and the `PolicySet` every tool runs them through), `calendar.py` + `slots.py` (seeded calendar, SQL slots), `search.py` (alias + full text + pgvector, fused), `geo.py` (gazetteer + KNN). |
+| `backend/catalogs/` | Catalog bundles: the payload plus what we derive for it (patient registry, calendar seed; each location is placed on the map from the area in its name). `given/` points at the untouched `data/catalog.json`; `gen-*` and `adv-*` are variants and hand-built adversarial catalogs (generated once by a script since removed; they are committed as data). `gazetteer.json` is the one fictional map. |
+| `backend/evals/` | The text-mode eval: runner over the real node graph, caller simulator, per-catalog oracle (the answer key, including the one target booking each caller is aiming for), LLM judge (pass/fail and quality, gpt-5.6-terra by default), scenario generators, naive baseline, report. |
+| `eval/personas/`, `eval/behaviors/` | Hand-written personas (catalog-independent) and reusable behaviour profiles. Runs land in `eval/runs/` (gitignored). |
+
+```bash
+make eval CATALOG=given MODELS=gpt-4o-mini N=3          # one catalog, one model
+make eval CATALOG=all MODELS=gpt-4o,gpt-4o-mini,gpt-5.6-luna,gpt-5.6-terra N=3 BASELINE=1
+cd backend && .venv/bin/python -m evals.show latest <job substring>   # read a conversation
+```
+
+Results and what they taught us: [`docs/eval/results.md`](docs/eval/results.md).
+
+Agents are plain JSON files in `backend/agents/`; the UI creates and edits them, and `DEFAULT_AGENT` in `bot.py` picks the one the prebuilt `/client` runs.

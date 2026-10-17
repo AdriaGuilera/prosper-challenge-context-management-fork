@@ -1,0 +1,44 @@
+{
+  "id": "preop-referral-existing",
+  "description": "Existing patient with a surgeon referral needs pre-operative clearance.",
+  "tags": [
+    "booking",
+    "pre-op",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Harold Pike",
+    "dob": "1959-01-08",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "Pre-operative Evaluation"
+      ]
+    },
+    "goal": "Schedule you for my medical clearance before surgery.",
+    "opening": "My surgeon needs me cleared before my hernia operation next month.",
+    "answers": {
+      "referral": "Yes, the surgeon's office sent a pre-op referral."
+    },
+    "preferences": {
+      "location": "near Mission Bay",
+      "time": "soonest"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Pre-operative Evaluation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Mission Bay",
+    "time": "soonest"
+  },
+  "source": "hidden"
+}

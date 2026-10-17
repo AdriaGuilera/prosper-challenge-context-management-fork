@@ -1,0 +1,38 @@
+{
+  "id": "xray-geary-ambiguous",
+  "description": "Says 'near Geary', a street through two areas; must ask which end.",
+  "tags": [
+    "proximity:street",
+    "gate:capability"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Ines Duarte",
+    "dob": "1965-03-25",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "X-Ray"
+      ]
+    },
+    "goal": "Book the X-ray your doctor referred you for, somewhere near Geary where you work.",
+    "opening": "Hi, I need an X-ray, near Geary if possible.",
+    "answers": {
+      "which part of geary": "the downtown end"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "X-Ray"
+      ]
+    },
+    "near": "Downtown",
+    "must_ask": [
+      "place"
+    ]
+  }
+}

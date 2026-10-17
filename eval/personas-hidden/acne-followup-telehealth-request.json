@@ -1,0 +1,44 @@
+{
+  "id": "acne-followup-telehealth-request",
+  "description": "Existing dermatology patient seeks acne follow-up but asks for an unsupported video visit.",
+  "tags": [
+    "no-booking",
+    "dermatology",
+    "telehealth"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Kiara Wallace",
+    "dob": "2004-03-16",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Set you up for a video refill check for my acne medicine.",
+    "opening": "Can Dr. Daniel Smith do my acne follow-up on video? I can't come in.",
+    "answers": {
+      "reason": "The cream is helping, but I need more prescribed."
+    },
+    "preferences": {
+      "doctor": "Dr. Daniel Smith"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Acne Follow-up"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Daniel Smith",
+      "says": "Dr. Daniel Smith",
+      "strict": true
+    }
+  },
+  "source": "hidden"
+}

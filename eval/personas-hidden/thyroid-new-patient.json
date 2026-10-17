@@ -1,0 +1,40 @@
+{
+  "id": "thyroid-new-patient",
+  "description": "New patient asks for a follow-up-only thyroid appointment without referral.",
+  "tags": [
+    "no-booking",
+    "endocrinology",
+    "new-patient"
+  ],
+  "behaviors": [
+    "vague"
+  ],
+  "caller": {
+    "name": "Claudia Werner",
+    "dob": "1982-10-30",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Have you book my thyroid follow-up.",
+    "opening": "I need someone to keep checking my thyroid medicine after I moved here.",
+    "answers": {
+      "referral": "I don't have a new referral, just my old lab results."
+    },
+    "preferences": {
+      "location": "near Richmond"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Thyroid Follow-up"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Richmond"
+  },
+  "source": "hidden"
+}

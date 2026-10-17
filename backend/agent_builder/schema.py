@@ -6,6 +6,8 @@
 # verbatim. The ONLY thing we add is `edges`: transitions expressed as DATA (a string
 # `target`) rather than as Python closures — because a Copilot can emit a string, not
 # a callable. `AgentBuilder` turns these strings back into the closures Pipecat wants.
+# Two optional additions: `tools` (catalog lookups by name, see tools.py) and `ui`
+# (editor layout), which the builder never reads.
 #
 
 from dataclasses import dataclass, field
@@ -48,6 +50,8 @@ class Node:
     pre_actions: list = field(default_factory=list)
     post_actions: list = field(default_factory=list)
     end: bool = False                                   # terminal -> ends the call
+    tools: list = field(default_factory=list)           # catalog tool names (no transition)
+    ui: dict = field(default_factory=dict)              # editor-only (e.g. position); ignored by the builder
 
     @classmethod
     def from_dict(cls, d: dict) -> "Node":
@@ -59,6 +63,8 @@ class Node:
             pre_actions=d.get("pre_actions", []),
             post_actions=d.get("post_actions", []),
             end=d.get("end", False),
+            tools=d.get("tools", []),
+            ui=d.get("ui", {}),
         )
 
 

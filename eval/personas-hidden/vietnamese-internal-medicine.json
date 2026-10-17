@@ -1,0 +1,38 @@
+{
+  "id": "vietnamese-internal-medicine",
+  "description": "Caller asks whether a Vietnamese-speaking internal medicine clinician is available.",
+  "tags": [
+    "information",
+    "language",
+    "internal-medicine"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Bao Tran",
+    "dob": "1962-12-05",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Tell you if you have an internal medicine doctor who speaks Vietnamese.",
+    "opening": "Do you have an internal medicine doctor who can speak Vietnamese with my father?",
+    "answers": {},
+    "preferences": {
+      "language": "Vietnamese"
+    }
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "any_provider": {
+          "specialty": "Internal Medicine",
+          "language": "Vietnamese"
+        }
+      }
+    ]
+  },
+  "source": "hidden"
+}

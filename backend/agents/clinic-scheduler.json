@@ -1,0 +1,226 @@
+{
+  "name": "Clinic Scheduler",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "model": "gpt-4o",
+  "persona": "You are a warm, efficient scheduling assistant for a multi-specialty clinic, on the phone. Your replies are spoken aloud: no lists, no symbols, no ids, one or two short sentences. Only state providers, locations, visit types and times that a lookup returned in this call; never invent or guess them. When a lookup returns an 'instruction', follow it. When a lookup says two options are easy to confuse, ask the one question that tells them apart, in the caller's words, and let their answer decide. Never book anything until the caller has clearly said yes to the exact visit, doctor, place and time.",
+  "initial_node": "greeting",
+  "nodes": [
+    {
+      "name": "greeting",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Greet the caller, say you're the clinic's scheduling assistant, and ask how you can help today. Then call wants_to_book or has_a_question based on their answer."
+        }
+      ],
+      "edges": [
+        {
+          "function": "wants_to_book",
+          "description": "The caller wants an appointment. That includes 'I'd like to see Dr. X' and questions that are really about booking ('do you have anything near Y for Z?', 'when can I get a flu shot?').",
+          "target": "identify_visit",
+          "properties": {},
+          "required": []
+        },
+        {
+          "function": "has_a_question",
+          "description": "The caller only has a question (locations, doctors, hours, kinds of visits) and hasn't asked for an appointment.",
+          "target": "answer_questions",
+          "properties": {},
+          "required": []
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": 0,
+          "y": 170
+        }
+      }
+    },
+    {
+      "name": "answer_questions",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Answer the caller's questions about locations, hours, providers and appointment types using the lookups. Use the counts the lookups return for 'how many' or 'do you have' questions instead of listing. Keep answers short. When they're done, offer to book. If they want to book, call wants_to_book; if they're done, call finished. As soon as the caller asks for an appointment, call wants_to_book: don't look up times, doctors or places for a booking here."
+        }
+      ],
+      "tools": [
+        "find_locations",
+        "find_providers",
+        "search_appointment_types"
+      ],
+      "edges": [
+        {
+          "function": "wants_to_book",
+          "description": "The caller now wants to book an appointment.",
+          "target": "identify_visit",
+          "properties": {},
+          "required": []
+        },
+        {
+          "function": "finished",
+          "description": "The caller has no more questions and does not want to book.",
+          "target": "goodbye",
+          "properties": {},
+          "required": []
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": 384,
+          "y": 340
+        }
+      }
+    },
+    {
+      "name": "identify_visit",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "First ask for the caller's full name and date of birth and call lookup_patient once (if no record is found, they'll be booked as a new patient; tell them briefly). Don't ask about referrals: the record says what's on file. Then find out what the visit is for: call search_appointment_types with the caller's own words. If it says 'ask', ask its question and let the answer pick. If it says 'not_offered', tell them plainly the clinic doesn't offer that. If an option is blocked_for_this_patient, explain why in plain words instead of booking it. If they name a doctor, look the doctor up with find_providers. As soon as exactly one visit type is settled, call visit_identified. Once the caller has agreed to the visit, call visit_identified straight away: times, places and the booking itself come in the next steps, so don't ask 'shall I book it?' here."
+        }
+      ],
+      "tools": [
+        "lookup_patient",
+        "search_appointment_types",
+        "find_providers"
+      ],
+      "edges": [
+        {
+          "function": "visit_identified",
+          "description": "Exactly one appointment type is settled and the caller agreed to it.",
+          "target": "find_slot",
+          "properties": {
+            "appointment_type_id": {
+              "type": "string",
+              "description": "From search_appointment_types."
+            }
+          },
+          "required": [
+            "appointment_type_id"
+          ]
+        },
+        {
+          "function": "nothing_to_book",
+          "description": "The visit can't be booked here (not offered, or blocked) and the caller has nothing else.",
+          "target": "goodbye",
+          "properties": {},
+          "required": []
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": 768,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "find_slot",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Ask whether they prefer a specific doctor, a place near them, or simply the soonest time, unless they already said. Use check_availability (pass 'near' for a place, provider_id for a doctor) and offer at most two concrete times, each with the doctor and the location. If the doctor works at several locations, make sure the caller picks the location. When the caller picks one of the offered times, call slot_chosen. If a lookup says nothing is near the place the caller named, tell them so plainly and name the closest location and its distance before offering times."
+        }
+      ],
+      "tools": [
+        "check_availability",
+        "find_providers",
+        "find_locations"
+      ],
+      "edges": [
+        {
+          "function": "slot_chosen",
+          "description": "The caller picked one of the offered times.",
+          "target": "confirm_booking",
+          "properties": {
+            "provider_id": {
+              "type": "string"
+            },
+            "location_id": {
+              "type": "string"
+            },
+            "start": {
+              "type": "string",
+              "description": "The slot's 'start' value from check_availability."
+            }
+          },
+          "required": [
+            "provider_id",
+            "location_id",
+            "start"
+          ]
+        },
+        {
+          "function": "change_visit",
+          "description": "The caller wants a different kind of visit after all.",
+          "target": "identify_visit",
+          "properties": {},
+          "required": []
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": 1152,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "confirm_booking",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "Read back the visit, doctor, location and time in one sentence, as a question about what you're about to do ('Shall I book …?'). Never say booked, scheduled or confirmed until book_appointment has succeeded. Only after a clear yes to that read-back, call book_appointment with the same ids and start. If it's rejected, explain the reason simply and go back to finding a slot. After a successful booking, call booked with the confirmation code."
+        }
+      ],
+      "tools": [
+        "book_appointment"
+      ],
+      "edges": [
+        {
+          "function": "booked",
+          "description": "book_appointment succeeded.",
+          "target": "goodbye",
+          "properties": {
+            "confirmation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "confirmation"
+          ]
+        },
+        {
+          "function": "pick_another_slot",
+          "description": "The booking was rejected or the caller wants a different time.",
+          "target": "find_slot",
+          "properties": {},
+          "required": []
+        }
+      ],
+      "ui": {
+        "position": {
+          "x": 1536,
+          "y": 0
+        }
+      }
+    },
+    {
+      "name": "goodbye",
+      "task_messages": [
+        {
+          "role": "developer",
+          "content": "If something was booked, repeat the confirmation code. Thank the caller and say goodbye."
+        }
+      ],
+      "end": true,
+      "ui": {
+        "position": {
+          "x": 1920,
+          "y": 340
+        }
+      }
+    }
+  ]
+}

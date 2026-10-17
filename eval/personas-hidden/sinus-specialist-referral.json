@@ -1,0 +1,46 @@
+{
+  "id": "sinus-specialist-referral",
+  "description": "New patient with a valid ENT referral seeks help for chronic sinus symptoms.",
+  "tags": [
+    "booking",
+    "ent",
+    "referral"
+  ],
+  "behaviors": [
+    "rambler"
+  ],
+  "caller": {
+    "name": "Bernadette Cole",
+    "dob": "1975-03-07",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Sinus Evaluation"
+      ]
+    },
+    "goal": "Help you schedule the sinus specialist visit my doctor referred.",
+    "opening": "I've had pressure and blocked sinuses for months, tried sprays, and my doctor referred me to an ear-nose-throat doctor.",
+    "answers": {
+      "referral": "Yes, the referral specifically says sinus evaluation."
+    },
+    "preferences": {
+      "location": "near Midtown",
+      "time": "soonest"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Sinus Evaluation"
+      ],
+      "acceptable": [
+        "ENT Consultation"
+      ],
+      "suboptimal": []
+    },
+    "near": "Midtown",
+    "time": "soonest"
+  },
+  "source": "hidden"
+}

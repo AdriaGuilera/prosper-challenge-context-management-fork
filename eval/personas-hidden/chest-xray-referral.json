@@ -1,0 +1,44 @@
+{
+  "id": "chest-xray-referral",
+  "description": "Existing patient has an imaging order for a chest x-ray.",
+  "tags": [
+    "booking",
+    "radiology",
+    "referral"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Rafael Ortiz",
+    "dob": "1966-02-20",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "X-Ray"
+      ]
+    },
+    "goal": "Schedule you for the chest x-ray my doctor ordered.",
+    "opening": "My doctor wants a chest x-ray after this cough; can you put me in soon?",
+    "answers": {
+      "referral": "The order is already sent, and it says chest x-ray."
+    },
+    "preferences": {
+      "location": "near Downtown",
+      "time": "soonest"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "X-Ray"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Downtown",
+    "time": "soonest"
+  },
+  "source": "hidden"
+}

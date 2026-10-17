@@ -1,0 +1,44 @@
+{
+  "id": "prenatal-new-patient",
+  "description": "Newly pregnant patient seeks first prenatal care.",
+  "tags": [
+    "booking",
+    "obgyn",
+    "new-patient"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Haley Morrison",
+    "dob": "1994-06-25",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Get you my first pregnancy appointment.",
+    "opening": "I had a positive test and I'm about eight weeks along; I need to start prenatal care.",
+    "answers": {
+      "pregnancy": "My last period began August 14."
+    },
+    "preferences": {
+      "location": "near Downtown",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Prenatal Visit"
+      ],
+      "acceptable": [
+        "OB/GYN New Patient Visit"
+      ],
+      "suboptimal": []
+    },
+    "near": "Downtown",
+    "part_of_day": "morning"
+  },
+  "source": "hidden"
+}

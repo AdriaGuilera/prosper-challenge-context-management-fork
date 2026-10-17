@@ -31,3 +31,13 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# ---- Local AI tooling (skills, design plugin state) ----
+.agents/
+.claude/
+.impeccable/
+skills-lock.json
+
+# ---- Local caches / eval runs ----
+backend/.cache/
+eval/runs/

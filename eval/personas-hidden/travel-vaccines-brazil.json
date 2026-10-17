@@ -1,0 +1,42 @@
+{
+  "id": "travel-vaccines-brazil",
+  "description": "New patient seeks travel vaccine advice before an international trip.",
+  "tags": [
+    "booking",
+    "vaccines",
+    "travel"
+  ],
+  "behaviors": [
+    "rambler"
+  ],
+  "caller": {
+    "name": "Tessa Morgan",
+    "dob": "1984-12-28",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Help you plan which shots I need before going to Brazil.",
+    "opening": "I'm leaving for Brazil in six weeks and don't know which travel vaccines I need.",
+    "answers": {
+      "travel": "I'll be visiting Rio and the Amazon for two weeks."
+    },
+    "preferences": {
+      "location": "near Sunset",
+      "time": "soonest"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Travel Vaccination Consult"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Sunset",
+    "time": "soonest"
+  },
+  "source": "hidden"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "hearing-test-child",
+  "description": "Parent requests a hearing test for a child without requiring specialty consultation.",
+  "tags": [
+    "booking",
+    "ent",
+    "pediatrics"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Owen Carlisle",
+    "dob": "2016-01-28",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Schedule you a hearing test for my son.",
+    "opening": "His teacher says he keeps asking people to repeat themselves, and we'd like his hearing checked.",
+    "answers": {
+      "patient": "Owen is ten, and he has no ear pain or fever."
+    },
+    "preferences": {
+      "location": "near Midtown"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Hearing Test / Audiogram"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Midtown"
+  },
+  "source": "hidden"
+}

@@ -10,22 +10,55 @@
 #
 
 import json
+import time
 from pathlib import Path
-from typing import Union
+from typing import Awaitable, Callable, Optional, Union
 
 from loguru import logger
+from opentelemetry import trace
 from pipecat_flows import FlowManager, FlowsFunctionSchema, NodeConfig
 
 from .schema import AgentConfig, Edge, Node
+from .tools import TOOLS, ToolContext, result_size, run_tool, schema_properties
+
+# Call events for the builder UI: node_entered, edge_taken, tool_started, tool_finished.
+EventSink = Callable[[dict], Awaitable[None]]
+
+# Edge and tool spans for the call trace (a no-op unless monitoring.setup_tracing ran).
+tracer = trace.get_tracer("agent_builder")
+
+
+def _json(value) -> str:
+    return json.dumps(value, default=str)
 
 
 class AgentBuilder:
     """Builds a runnable Pipecat Flows graph from a declarative AgentConfig."""
 
-    def __init__(self, config: AgentConfig):
+    def __init__(
+        self,
+        config: AgentConfig,
+        emit: Optional[EventSink] = None,
+        ctx: Optional[ToolContext] = None,
+    ):
         self.config = config
         self._nodes_by_name = {n.name: n for n in config.nodes}
+        self._emit = emit
+        # Per-call tool state: catalog, calendar scope, clock, and what the call has established.
+        self.ctx = ctx or ToolContext()
+        self._repeats: dict = {}
         self._validate()
+
+    async def prepare(self) -> None:
+        """Resolve the catalog version and its enums before the first node is built."""
+        await self.ctx.prepare()
+
+    def set_event_sink(self, emit: EventSink) -> None:
+        self._emit = emit
+
+    async def _event(self, kind: str, **data) -> None:
+        if self._emit:
+            await self._emit({"type": kind, **data})
 
     # ---- loading -----------------------------------------------------------
     @classmethod
@@ -53,18 +86,25 @@ class AgentBuilder:
                         f"Edge '{edge.function}' in node '{node.name}' targets "
                         f"unknown node '{edge.target}'."
                     )
+            for tool in node.tools:
+                if tool not in TOOLS:
+                    raise ValueError(f"Node '{node.name}' uses unknown tool '{tool}'.")
 
     # ---- compilation -------------------------------------------------------
     def build_initial_node(self) -> NodeConfig:
         """Return the entry NodeConfig; downstream nodes are built lazily on transition."""
         return self._make_node(self._nodes_by_name[self.config.initial_node])
 
+    async def announce_start(self) -> None:
+        await self._event("node_entered", node=self.config.initial_node)
+
     def _make_node(self, node: Node) -> NodeConfig:
         node_config: NodeConfig = {
             "name": node.name,
             "role_message": node.role_message or self.config.persona,
             "task_messages": node.task_messages,
-            "functions": [self._make_edge_function(edge) for edge in node.edges],
+            "functions": [self._make_edge_function(node, edge) for edge in node.edges]
+            + [self._make_tool_function(node, name) for name in node.tools],
         }
         if node.pre_actions:
             node_config["pre_actions"] = node.pre_actions
@@ -75,11 +115,22 @@ class AgentBuilder:
             node_config["post_actions"] = [{"type": "end_conversation"}]
         return node_config
 
-    def _make_edge_function(self, edge: Edge) -> FlowsFunctionSchema:
+    def _make_edge_function(self, node: Node, edge: Edge) -> FlowsFunctionSchema:
         async def handler(args: dict, flow_manager: FlowManager):
             # Persist what the caller gave us so later nodes can use it.
             flow_manager.state.update(args)
             logger.info(f"[{edge.function}] -> {edge.target} | collected: {args}")
+            with tracer.start_as_current_span(f"edge {edge.function}") as span:
+                span.set_attribute("langfuse.observation.input", _json(args))
+                span.set_attribute("langfuse.observation.output", _json({"from": node.name, "to": edge.target}))
+            await self._event(
+                "edge_taken",
+                source=node.name,
+                target=edge.target,
+                function=edge.function,
+                args=args,
+            )
+            await self._event("node_entered", node=edge.target)
             next_node = self._make_node(self._nodes_by_name[edge.target])
             return {"status": "success", **args}, next_node
 
@@ -88,5 +139,56 @@ class AgentBuilder:
             description=edge.description,
             properties=edge.properties,
             required=edge.required,
+            handler=handler,
+        )
+
+    # ---- tools -------------------------------------------------------
+    def _make_tool_function(self, node: Node, name: str) -> FlowsFunctionSchema:
+        tool = TOOLS[name]
+
+        async def handler(args: dict, flow_manager: FlowManager):
+            # Loop guard: a model that re-runs the same lookup is stuck; tell it so.
+            key = (node.name, name, json.dumps(args, sort_keys=True, default=str))
+            self._repeats[key] = self._repeats.get(key, 0) + 1
+            if self._repeats[key] > 2:
+                return {
+                    "repeat": True,
+                    "instruction": "You already ran this exact lookup and have its answer. "
+                    "Don't run it again: answer the caller, ask them something, or take the next step.",
+                }, None
+            call_id = f"{name}-{time.monotonic_ns()}"
+            await self._event(
+                "tool_started", id=call_id, node=node.name, tool=name, args=args
+            )
+            started = time.perf_counter()
+            with tracer.start_as_current_span(f"tool {name}") as span:
+                span.set_attribute("langfuse.observation.input", _json(args))
+                span.set_attribute("node", node.name)
+                try:
+                    result = await run_tool(name, args, self.ctx)
+                except Exception as e:  # a broken lookup must not end the call
+                    logger.exception(f"[{name}] failed")
+                    result = {"error": str(e)}
+                    span.set_attribute("langfuse.observation.level", "ERROR")
+                span.set_attribute("langfuse.observation.output", _json(result))
+            ms = round((time.perf_counter() - started) * 1000, 2)
+            logger.info(f"[{name}] {ms}ms | args: {args}")
+            await self._event(
+                "tool_finished",
+                id=call_id,
+                node=node.name,
+                tool=name,
+                ms=ms,
+                rows=result_size(result),
+                ok="error" not in result and result.get("booked", True) is not False,
+                result=result,
+            )
+            return result, None  # stay on this node
+
+        return FlowsFunctionSchema(
+            name=tool.name,
+            description=tool.description,
+            properties=schema_properties(tool, self.ctx),
+            required=tool.required,
             handler=handler,
         )

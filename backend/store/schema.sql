@@ -1,0 +1,225 @@
+-- Canonical store.
+--
+-- Every structural row is namespaced by its catalog name (bundle.json "name"), so
+-- several catalogs live side by side and an id like appt_002 never leaks across
+-- them. Operational rows (schedules, bookings) hang off the same name.
+
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
+
+-- Spoken-name match, token by token: exact 1.0, same sound and close spelling 0.8
+-- ("Ngyuen" -> "Nguyen", what STT does to surnames), else trigram similarity.
+-- Averaged over the caller's tokens. Never an embedding: names are not meanings.
+CREATE OR REPLACE FUNCTION name_score(q text, name text) RETURNS float8
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT coalesce(avg(best), 0) FROM (
+        SELECT max(CASE WHEN qt = nt THEN 1.0
+                        WHEN dmetaphone(qt) = dmetaphone(nt) AND levenshtein(qt, nt) <= 2 THEN 0.8
+                        ELSE similarity(qt, nt) END) AS best
+        FROM unnest(string_to_array(q, ' ')) qt, unnest(string_to_array(name, ' ')) nt
+        GROUP BY qt) s
+$$;
+
+CREATE TABLE IF NOT EXISTS catalogs (
+    name            text PRIMARY KEY,           -- 'given', 'large', ...
+    source_path     text NOT NULL,
+    calendar_seed   int  NOT NULL,
+    calendar_anchor date NOT NULL,              -- first day the mocked calendar covers
+    ingested_at     timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE catalogs DROP COLUMN IF EXISTS lint;   -- older databases
+
+-- ---- structural --------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS locations (
+    catalog         text NOT NULL,
+    id              text NOT NULL,
+    name            text NOT NULL,
+    address         text NOT NULL,
+    city            text NOT NULL,
+    phone           text NOT NULL,
+    hours_text      text NOT NULL,              -- as delivered; parsed into location_hours
+    place           text,                       -- gazetteer place it maps to
+    geom            geometry(Point, 0),         -- synthetic plane, km
+    PRIMARY KEY (catalog, id)
+);
+CREATE INDEX IF NOT EXISTS locations_geom ON locations USING gist (geom);
+CREATE INDEX IF NOT EXISTS locations_name_trgm ON locations USING gin (name gin_trgm_ops);
+
+CREATE TABLE IF NOT EXISTS location_capabilities (
+    catalog         text NOT NULL,
+    location_id     text NOT NULL,
+    capability      text NOT NULL,
+    PRIMARY KEY (catalog, location_id, capability)
+);
+CREATE INDEX IF NOT EXISTS location_capabilities_cap ON location_capabilities (catalog, capability);
+
+-- Operational: parsed from hours_text at ingest, weekday 1=Mon..7=Sun.
+CREATE TABLE IF NOT EXISTS location_hours (
+    catalog         text NOT NULL,
+    location_id     text NOT NULL,
+    weekday         int  NOT NULL CHECK (weekday BETWEEN 1 AND 7),
+    opens           time NOT NULL,
+    closes          time NOT NULL CHECK (closes > opens),
+    PRIMARY KEY (catalog, location_id, weekday, opens)
+);
+
+CREATE TABLE IF NOT EXISTS providers (
+    catalog                text NOT NULL,
+    id                     text NOT NULL,
+    name                   text NOT NULL,
+    search_name            text NOT NULL,       -- name without the "Dr." honorific, lowercased
+    title                  text NOT NULL,
+    specialty              text NOT NULL,       -- display only, never an eligibility key
+    accepting_new_patients boolean NOT NULL,
+    PRIMARY KEY (catalog, id)
+);
+CREATE INDEX IF NOT EXISTS providers_name_trgm ON providers USING gin (search_name gin_trgm_ops);
+
+CREATE TABLE IF NOT EXISTS provider_languages (
+    catalog         text NOT NULL,
+    provider_id     text NOT NULL,
+    language        text NOT NULL,
+    PRIMARY KEY (catalog, provider_id, language)
+);
+
+CREATE TABLE IF NOT EXISTS provider_locations (
+    catalog         text NOT NULL,
+    provider_id     text NOT NULL,
+    location_id     text NOT NULL,
+    PRIMARY KEY (catalog, provider_id, location_id)
+);
+CREATE INDEX IF NOT EXISTS provider_locations_loc ON provider_locations (catalog, location_id);
+
+CREATE TABLE IF NOT EXISTS appointment_types (
+    catalog              text NOT NULL,
+    id                   text NOT NULL,
+    name                 text NOT NULL,
+    specialty            text NOT NULL,
+    duration_min         int  NOT NULL CHECK (duration_min > 0),
+    requires_referral    boolean NOT NULL,
+    new_patients_allowed boolean NOT NULL,
+    required_capability  text,                  -- absent on most types: NULL, never ''
+    PRIMARY KEY (catalog, id)
+);
+ALTER TABLE appointment_types DROP COLUMN IF EXISTS search_doc;   -- older databases: full-text search is gone
+
+CREATE TABLE IF NOT EXISTS provider_appointment_types (
+    catalog             text NOT NULL,
+    provider_id         text NOT NULL,
+    appointment_type_id text NOT NULL,
+    PRIMARY KEY (catalog, provider_id, appointment_type_id)
+);
+CREATE INDEX IF NOT EXISTS pat_type ON provider_appointment_types (catalog, appointment_type_id);
+
+-- ---- meaning layer -----------------------------------------------------------
+
+-- older databases: the curated alias ranker and the look-alike groups are gone
+DROP TABLE IF EXISTS type_aliases;
+DROP TABLE IF EXISTS ambiguity_clusters;
+
+-- Embeddings of type names, tagged with the model that made them. Older databases also
+-- embedded alias phrases (a `source` column): drop and rebuild, re-ingest refills it from
+-- embedding_cache without new API calls.
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'type_embeddings' AND column_name = 'source') THEN
+        DROP TABLE type_embeddings;
+    END IF;
+END $$;
+CREATE TABLE IF NOT EXISTS type_embeddings (
+    catalog             text NOT NULL,
+    appointment_type_id text NOT NULL,
+    text                text NOT NULL,
+    model               text NOT NULL,
+    embedding           vector(1536) NOT NULL,
+    PRIMARY KEY (catalog, appointment_type_id, text, model)
+);
+
+-- ---- patient state (mocked registry) -----------------------------------------
+
+-- scope isolates concurrent eval conversations: 'base' rows are the catalog's own
+-- registry; a run adds its patient under its own scope.
+CREATE TABLE IF NOT EXISTS patients (
+    catalog         text NOT NULL,
+    scope           text NOT NULL DEFAULT 'base',
+    id              text NOT NULL,
+    full_name       text NOT NULL,
+    search_name     text NOT NULL,
+    date_of_birth   date NOT NULL,
+    PRIMARY KEY (catalog, scope, id)
+);
+CREATE INDEX IF NOT EXISTS patients_lookup ON patients (catalog, date_of_birth);
+
+CREATE TABLE IF NOT EXISTS referrals (
+    catalog             text NOT NULL,
+    scope               text NOT NULL DEFAULT 'base',
+    patient_id          text NOT NULL,
+    appointment_type_id text NOT NULL,
+    expires_on          date NOT NULL,
+    PRIMARY KEY (catalog, scope, patient_id, appointment_type_id)
+);
+
+-- ---- calendar ------------------------------------------------------------------
+
+-- Weekly recurring working blocks, generated from a seed, clipped to location hours.
+CREATE TABLE IF NOT EXISTS schedules (
+    catalog         text NOT NULL,
+    provider_id     text NOT NULL,
+    location_id     text NOT NULL,
+    weekday         int  NOT NULL CHECK (weekday BETWEEN 1 AND 7),
+    starts          time NOT NULL,
+    ends            time NOT NULL CHECK (ends > starts),
+    PRIMARY KEY (catalog, provider_id, weekday, starts)
+);
+CREATE INDEX IF NOT EXISTS schedules_pair ON schedules (catalog, provider_id, location_id);
+
+CREATE TABLE IF NOT EXISTS appointments (
+    id                  bigserial PRIMARY KEY,
+    catalog             text NOT NULL,
+    scope               text NOT NULL DEFAULT 'base',
+    confirmation        text NOT NULL,
+    idempotency_key     text NOT NULL,
+    patient_id          text NOT NULL,
+    provider_id         text NOT NULL,
+    location_id         text NOT NULL,
+    appointment_type_id text NOT NULL,
+    starts_at           timestamp NOT NULL,
+    ends_at             timestamp NOT NULL,
+    status              text NOT NULL DEFAULT 'booked',
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (catalog, scope, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS appointments_provider_time ON appointments (catalog, provider_id, starts_at);
+
+DROP FUNCTION IF EXISTS bookable_for(text, boolean, text[]);   -- older databases
+DROP VIEW IF EXISTS bookable;
+
+-- ---- geography ---------------------------------------------------
+
+-- The one fictional gazetteer, shared by every catalog. A street is a MultiPoint:
+-- several points means it spans areas, which makes it ambiguous on its own.
+-- Reloaded whole on every ingest. (Older databases had a version column: drop and recreate.)
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'gazetteer_places' AND column_name = 'gazetteer_version') THEN
+        DROP TABLE gazetteer_places;
+    END IF;
+END $$;
+CREATE TABLE IF NOT EXISTS gazetteer_places (
+    name              text PRIMARY KEY,
+    kind              text NOT NULL,
+    aliases           text[] NOT NULL DEFAULT '{}',
+    search_names      text[] NOT NULL,          -- normalised name + aliases
+    geom              geometry(MultiPoint, 0) NOT NULL
+);
+
+-- The only embedding cache: re-ingest and repeated eval phrasing never re-hit the API.
+CREATE TABLE IF NOT EXISTS embedding_cache (
+    model     text NOT NULL,
+    text      text NOT NULL,
+    embedding vector(1536) NOT NULL,
+    PRIMARY KEY (model, text)
+);

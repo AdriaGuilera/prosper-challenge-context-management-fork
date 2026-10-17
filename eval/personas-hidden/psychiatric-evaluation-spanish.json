@@ -1,0 +1,48 @@
+{
+  "id": "psychiatric-evaluation-spanish",
+  "description": "New patient with referral requests a Spanish-speaking psychiatric evaluation.",
+  "tags": [
+    "booking",
+    "psychiatry",
+    "language"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Isabel Rojas",
+    "dob": "1996-07-04",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Psychiatric Evaluation"
+      ]
+    },
+    "goal": "Arrange you an evaluation in Spanish for anxiety and panic attacks.",
+    "opening": "Mi doctor sent a referral because I've been having panic attacks, and I need someone who can speak Spanish.",
+    "answers": {
+      "referral": "Sí, my primary care office said they sent it."
+    },
+    "preferences": {
+      "language": "Spanish",
+      "location": "near Mission District"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Psychiatric Evaluation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "provider": {
+      "specialty": "Psychiatry",
+      "language": "Spanish",
+      "strict": true
+    },
+    "near": "Mission District"
+  },
+  "source": "hidden"
+}

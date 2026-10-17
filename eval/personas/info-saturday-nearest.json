@@ -1,0 +1,31 @@
+{
+  "id": "info-saturday-nearest",
+  "description": "Information only: Saturday hours and the closest clinic to a place.",
+  "tags": [
+    "info",
+    "hours"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Paul Becker",
+    "dob": "1971-01-30",
+    "record": {
+      "existing": true
+    },
+    "goal": "Find out whether any clinic is open on Saturdays, and which clinic is closest to North Beach. You don't want to book today.",
+    "opening": "Hi, quick question: are any of your clinics open on Saturday?"
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "open_on": "Saturday"
+      },
+      {
+        "nearest_to": "North Beach"
+      }
+    ]
+  }
+}

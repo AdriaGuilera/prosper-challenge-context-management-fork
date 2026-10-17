@@ -1,0 +1,38 @@
+{
+  "id": "skin-check-one-spot",
+  "description": "Says 'skin check' about one changed mole. Skin Cancer Screening and Full Body Skin Exam both look at it, so asking or booking either passes.",
+  "tags": [
+    "lookalike",
+    "ambiguity"
+  ],
+  "behaviors": [
+    "vague",
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Dana Whitfield",
+    "dob": "1987-03-14",
+    "record": {
+      "existing": true
+    },
+    "goal": "Get a skin check. A mole on your back changed colour and you want someone to look at it.",
+    "opening": "Hi, I'd like to book a skin check.",
+    "answers": {
+      "what kind of skin check": "it's really about that one mole, not a whole-body exam"
+    },
+    "preferences": {
+      "time": "any time in the next couple of weeks"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Skin Cancer Screening"
+      ],
+      "acceptable": [
+        "Full Body Skin Exam"
+      ]
+    }
+  }
+}

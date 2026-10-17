@@ -1,0 +1,29 @@
+{
+  "id": "dental-cleaning-near-sunset",
+  "description": "Dental cleaning near the Sunset: only one site has dental at all.",
+  "tags": [
+    "gate:capability",
+    "proximity"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Nina Cho",
+    "dob": "1979-04-17",
+    "record": {
+      "existing": true
+    },
+    "goal": "Book a teeth cleaning, ideally somewhere near the Sunset where you live.",
+    "opening": "Hi, can I book a teeth cleaning? Somewhere near the Sunset would be great."
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Dental Cleaning"
+      ]
+    },
+    "near": "Sunset"
+  }
+}

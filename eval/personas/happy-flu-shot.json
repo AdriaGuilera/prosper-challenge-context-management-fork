@@ -1,0 +1,34 @@
+{
+  "id": "happy-flu-shot",
+  "description": "Existing patient wants a flu shot, soonest.",
+  "tags": [
+    "happy",
+    "time:soonest"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Robin Hale",
+    "dob": "1984-02-11",
+    "record": {
+      "existing": true
+    },
+    "goal": "Get a flu shot as soon as possible.",
+    "preferences": {
+      "time": "as soon as possible, any location"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Flu Shot"
+      ],
+      "acceptable": [
+        "Vaccination / Immunization"
+      ]
+    },
+    "time": "soonest"
+  }
+}

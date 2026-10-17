@@ -1,0 +1,35 @@
+{
+  "id": "sick-near-lindenwood-tie",
+  "description": "Sick visit from a place exactly equidistant between two clinics.",
+  "tags": [
+    "proximity:tie",
+    "lookalike"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Felix Grant",
+    "dob": "1986-10-09",
+    "record": {
+      "existing": true
+    },
+    "goal": "You've had a bad cold for a week and want to see a doctor in the next few days, close to Lindenwood where you live.",
+    "opening": "Hi, I've been sick all week and I'd like to see someone, somewhere near Lindenwood.",
+    "answers": {
+      "child or adult, urgent": "it's for me, the next few days is fine"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Sick Visit"
+      ],
+      "acceptable": [
+        "Urgent Care Visit"
+      ]
+    },
+    "near": "Lindenwood"
+  }
+}

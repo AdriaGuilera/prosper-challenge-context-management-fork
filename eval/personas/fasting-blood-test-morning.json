@@ -1,0 +1,33 @@
+{
+  "id": "fasting-blood-test-morning",
+  "description": "Volunteers the disambiguator (fasting); wants a morning slot.",
+  "tags": [
+    "lookalike",
+    "time:part-of-day"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Jordan Bell",
+    "dob": "2001-07-08",
+    "record": {
+      "existing": true
+    },
+    "goal": "Get blood work done. Your doctor told you not to eat beforehand, so you want an early morning slot, the soonest one.",
+    "opening": "Hi, I need to get my blood drawn. I was told to fast before it, so morning please."
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Fasting Blood Test"
+      ],
+      "suboptimal": [
+        "Blood Draw / Lab Work"
+      ]
+    },
+    "time": "soonest",
+    "part_of_day": "morning"
+  }
+}

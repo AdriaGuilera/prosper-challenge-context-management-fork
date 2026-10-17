@@ -1,0 +1,41 @@
+{
+  "id": "mole-removal-referral-confusion",
+  "description": "Patient believes a dermatology referral automatically authorizes removal.",
+  "tags": [
+    "no-booking",
+    "referral",
+    "procedure"
+  ],
+  "behaviors": [
+    "correction-hunter"
+  ],
+  "caller": {
+    "name": "Derek Vaughn",
+    "dob": "1980-12-01",
+    "record": {
+      "existing": true,
+      "referrals": [
+        "Dermatology Consultation"
+      ]
+    },
+    "goal": "Have you remove the bump on my back at my first visit.",
+    "opening": "My doctor referred me to dermatology, so I need that mole taken off on Friday.",
+    "answers": {
+      "referral": "The paper says dermatology consult, but it is for the mole."
+    },
+    "preferences": {
+      "time": "afternoon"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Mole Removal"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    }
+  },
+  "source": "hidden"
+}
