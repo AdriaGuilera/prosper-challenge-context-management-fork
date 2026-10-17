@@ -1,0 +1,44 @@
+{
+  "id": "flu-shot-family",
+  "description": "Parent schedules a flu vaccination for an established child.",
+  "tags": [
+    "booking",
+    "vaccination",
+    "pediatrics"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Sofia Bennett",
+    "dob": "2013-10-17",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Book you a flu shot for my daughter.",
+    "opening": "Can Sofia get her flu shot after school this week?",
+    "answers": {
+      "patient": "She is thirteen and has no fever today."
+    },
+    "preferences": {
+      "time": "afternoon",
+      "location": "near Downtown"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Flu Shot"
+      ],
+      "acceptable": [
+        "Vaccination / Immunization"
+      ],
+      "suboptimal": []
+    },
+    "near": "Downtown",
+    "part_of_day": "afternoon"
+  },
+  "source": "hidden"
+}

@@ -1,0 +1,50 @@
+{
+  "id": "memory-evaluation-vietnamese",
+  "description": "Family seeks a Vietnamese-speaking neurologist for a referred memory assessment.",
+  "tags": [
+    "booking",
+    "neurology",
+    "language"
+  ],
+  "behaviors": [
+    "rambler"
+  ],
+  "caller": {
+    "name": "Thanh Pham",
+    "dob": "1943-07-11",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Memory Evaluation"
+      ]
+    },
+    "goal": "Arrange you an appointment for my mother's worsening memory with a Vietnamese-speaking doctor.",
+    "opening": "My mother has been repeating herself and losing her way, and we have a referral; Vietnamese is very important.",
+    "answers": {
+      "referral": "Yes, her primary doctor sent it last week."
+    },
+    "preferences": {
+      "language": "Vietnamese",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Memory Evaluation"
+      ],
+      "acceptable": [
+        "Neurology Consultation"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "specialty": "Neurology",
+      "language": "Vietnamese",
+      "strict": true
+    },
+    "part_of_day": "morning"
+  },
+  "source": "hidden"
+}

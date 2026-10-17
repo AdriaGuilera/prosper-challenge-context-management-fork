@@ -1,0 +1,44 @@
+{
+  "id": "physical-therapy-referral",
+  "description": "New patient with referral seeks physical therapy after a shoulder injury.",
+  "tags": [
+    "booking",
+    "physical-therapy",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Cameron Ellis",
+    "dob": "1990-04-11",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Physical Therapy Evaluation"
+      ]
+    },
+    "goal": "Get you started with therapy for my injured shoulder.",
+    "opening": "I strained my shoulder lifting boxes, and the urgent care doctor referred me for physical therapy.",
+    "answers": {
+      "referral": "Yes, it says physical therapy evaluation."
+    },
+    "preferences": {
+      "location": "near Mission District",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Physical Therapy Evaluation"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Mission District",
+    "part_of_day": "morning"
+  },
+  "source": "hidden"
+}

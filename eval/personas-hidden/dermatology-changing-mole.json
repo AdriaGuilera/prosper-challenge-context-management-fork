@@ -1,0 +1,47 @@
+{
+  "id": "dermatology-changing-mole",
+  "description": "New patient has a referral for a changing mole and seeks dermatology.",
+  "tags": [
+    "booking",
+    "dermatology",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Amelia Torres",
+    "dob": "1987-08-30",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "Dermatology Consultation"
+      ]
+    },
+    "goal": "Help you get a dermatologist to look at a mole that changed color.",
+    "opening": "A mole on my shoulder got darker and bigger, and my doctor referred me to skin medicine.",
+    "answers": {
+      "referral": "Yes, my family doctor faxed the referral."
+    },
+    "preferences": {
+      "location": "near Sunset",
+      "time": "soonest"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Dermatology Consultation"
+      ],
+      "acceptable": [
+        "Skin Cancer Screening",
+        "Full Body Skin Exam"
+      ],
+      "suboptimal": []
+    },
+    "near": "Sunset",
+    "time": "soonest"
+  },
+  "source": "hidden"
+}

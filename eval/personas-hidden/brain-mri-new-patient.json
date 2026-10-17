@@ -1,0 +1,44 @@
+{
+  "id": "brain-mri-new-patient",
+  "description": "New patient has a valid brain MRI referral and wants imaging near Mission Bay.",
+  "tags": [
+    "booking",
+    "radiology",
+    "referral"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Sonia Iyer",
+    "dob": "1991-01-19",
+    "record": {
+      "existing": false,
+      "referrals": [
+        "MRI - Brain"
+      ]
+    },
+    "goal": "Schedule you for the brain scan my neurologist ordered.",
+    "opening": "My neurologist ordered an MRI of my brain for new headaches; can I schedule it?",
+    "answers": {
+      "referral": "Yes, their office sent the order electronically."
+    },
+    "preferences": {
+      "location": "near Mission Bay",
+      "time": "afternoon"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "MRI - Brain"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Mission Bay",
+    "part_of_day": "afternoon"
+  },
+  "source": "hidden"
+}

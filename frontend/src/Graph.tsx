@@ -37,6 +37,16 @@ type WireData = {
   taken: number
   next: boolean
   live: boolean
+  lane: number // back wires only: which loop above the nodes, so two never share one
+}
+
+// A wire that runs right to left (a "go back" transition) would fold onto its forward
+// twin, label on label. It loops over the top of both nodes instead, one lane per wire.
+function loopPath(sx: number, sy: number, tx: number, ty: number, lane: number): [string, number, number] {
+  const out = 28
+  const y = Math.min(sy, ty) - 110 - lane * 26
+  const path = `M ${sx} ${sy} H ${sx + out} V ${y} H ${tx - out} V ${ty} H ${tx}`
+  return [path, (sx + tx) / 2, y]
 }
 
 const CircuitNode = memo(function CircuitNode({ data, selected }: NodeProps<FlowNode<CircuitData>>) {
@@ -70,16 +80,19 @@ const CircuitNode = memo(function CircuitNode({ data, selected }: NodeProps<Flow
 
 const WireEdge = memo(function WireEdge(props: EdgeProps<FlowEdge<WireData>>) {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, selected, markerEnd } = props
-  const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-    borderRadius: 0,
-    offset: 28,
-  })
+  const [path, labelX, labelY] =
+    sourceX > targetX
+      ? loopPath(sourceX, sourceY, targetX, targetY, data?.lane ?? 0)
+      : getSmoothStepPath({
+          sourceX,
+          sourceY,
+          targetX,
+          targetY,
+          sourcePosition,
+          targetPosition,
+          borderRadius: 0,
+          offset: 28,
+        })
   const taken = data?.taken ?? 0
   const state = taken > 0 ? 'taken' : data?.next ? 'next' : 'idle'
   // Fixed weight ramp: each repeat traversal thickens the wire, capped at 4.
@@ -165,9 +178,15 @@ export function Graph({ agent, trace, selection, flagged, locked, onSelect, onMo
     [agent, active, live, trace.visited, selection, flagged, locked],
   )
 
-  const edges: FlowEdge<WireData>[] = useMemo(
-    () =>
-      agent.nodes.flatMap((n) =>
+  const edges: FlowEdge<WireData>[] = useMemo(() => {
+    // number the back wires, shortest first, so nested loops don't cross
+    const x = (name: string) => agent.nodes.find((n) => n.name === name)?.ui?.position?.x ?? 0
+    const back = agent.nodes
+      .flatMap((n) => n.edges.map((e, i) => ({ id: `${n.name}>${i}`, span: x(n.name) - x(e.target) })))
+      .filter((b) => b.span > 0)
+      .sort((a, b) => a.span - b.span)
+    const lanes = new Map(back.map((b, i) => [b.id, i]))
+    return agent.nodes.flatMap((n) =>
         n.edges.map((e, i) => ({
           id: `${n.name}>${i}`,
           source: n.name,
@@ -179,11 +198,11 @@ export function Graph({ agent, trace, selection, flagged, locked, onSelect, onMo
             taken: trace.taken[`${n.name}>${i}`] ?? 0,
             next: live && n.name === active,
             live,
+            lane: lanes.get(`${n.name}>${i}`) ?? 0,
           },
         })),
-      ),
-    [agent, trace.taken, selection, live, active],
-  )
+      )
+  }, [agent, trace.taken, selection, live, active])
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<FlowNode<CircuitData>>[]) => {

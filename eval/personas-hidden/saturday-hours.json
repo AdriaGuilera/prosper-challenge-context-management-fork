@@ -1,0 +1,32 @@
+{
+  "id": "saturday-hours",
+  "description": "Caller asks whether the clinic is open on Saturday.",
+  "tags": [
+    "information",
+    "hours"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Colin Ames",
+    "dob": "1981-04-06",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Tell you whether you are open Saturdays.",
+    "opening": "Are any of your offices open on Saturday?",
+    "answers": {},
+    "preferences": {}
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "open_on": "Saturday"
+      }
+    ]
+  },
+  "source": "hidden"
+}

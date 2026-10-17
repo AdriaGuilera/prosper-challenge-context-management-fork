@@ -1,0 +1,43 @@
+{
+  "id": "contact-lens-exam",
+  "description": "New patient asks for a contact lens fitting.",
+  "tags": [
+    "booking",
+    "ophthalmology",
+    "new-patient"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Marcus Bell",
+    "dob": "2000-12-14",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Book you an appointment to get fitted for contacts.",
+    "opening": "I wear glasses and want to switch to contact lenses; can someone fit me?",
+    "answers": {
+      "vision": "No eye pain or emergency, just a new prescription and contacts."
+    },
+    "preferences": {
+      "time": "afternoon"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Contact Lens Fitting"
+      ],
+      "acceptable": [
+        "Eye Exam",
+        "Comprehensive Eye Exam"
+      ],
+      "suboptimal": []
+    },
+    "part_of_day": "afternoon"
+  },
+  "source": "hidden"
+}

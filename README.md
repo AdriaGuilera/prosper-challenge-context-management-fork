@@ -34,10 +34,12 @@ Remember to update the `.env` file accordingly.
 | --- | --- |
 | `backend/bot.py` | The voice pipeline (WebRTC + ElevenLabs STT/TTS + OpenAI LLM). Runs the agent named in the call's `/start` body, streams graph events to the UI over RTVI, and serves the built UI and the agents API. No graph logic lives here. |
 | `backend/agent_builder/` | All agent-building code. `schema.py` = the declarative `AgentConfig` / `Node` / `Edge` contract (plus per-node `tools` and editor-only `ui`); `builder.py` = `AgentBuilder`, which validates the JSON, compiles it into a Pipecat Flows graph and emits call events; `tools.py` = the catalog lookups a node can expose. |
+| `backend/monitoring.py` | Call monitoring: each call is one OpenTelemetry trace in Langfuse (turns, STT / LLM / TTS with tokens and cost, and every node transition and catalog tool call with its input and output). Off when the `LANGFUSE_*` keys are missing. |
 | `backend/agents_api.py` | List / load / save agent JSON for the UI. A save is rejected unless `AgentBuilder` can compile it. |
 | `backend/agents/` | Agents **as data**. `clinic-scheduler.json` uses the catalog tools; `example-flow.json` is the original sample. |
 | `frontend/` | The builder UI: graph editor, inspector, and live test-call panel. |
 | `docs/` | `task.md` (the challenge), `eval/results.md` (what the eval measured), and `PRODUCT.md`. |
+| `Dockerfile`, `deploy/` | The hosted demo at `prosper-challenge.adriaguilera.com` (basic auth), redeployed on push to `main`. See [`deploy/README.md`](deploy/README.md). |
 | `backend/data/catalog.json` | A deliberately large, deliberately messy clinic catalog (locations, providers, appointment types, booking rules) for the Phase 2 work. See [`backend/data/README.md`](backend/data/README.md). |
 
 ## The store and the eval (Phase 2)

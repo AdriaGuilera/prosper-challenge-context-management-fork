@@ -61,8 +61,6 @@ class ToolContext:
                 "specialty": [r[0] for r in await conn.fetch(
                     "SELECT DISTINCT specialty FROM (SELECT specialty FROM providers WHERE catalog = $1 "
                     "UNION SELECT specialty FROM appointment_types WHERE catalog = $1) s ORDER BY 1", self.catalog)],
-                "capability": [r[0] for r in await conn.fetch(
-                    "SELECT DISTINCT capability FROM location_capabilities WHERE catalog = $1 ORDER BY 1", self.catalog)],
                 "language": [r[0] for r in await conn.fetch(
                     "SELECT DISTINCT language FROM provider_languages WHERE catalog = $1 ORDER BY 1", self.catalog)],
             }
@@ -401,10 +399,10 @@ async def _place_point(conn, text: str) -> tuple:
                  "instruction": "That place isn't on our map. Ask for a nearby neighbourhood or landmark, or offer the list of locations."}
 
 
-# Find locations by name, services, open day, or distance from a place the caller named.
+# Find locations by name, open day, visit, provider, or distance from a place the caller named.
 async def find_locations(args: FindLocationsArgs, ctx: ToolContext, conn) -> dict:
     name = normalize(args.name or "")
-    near, capability, open_on = args.near, args.capability, args.open_on
+    near, open_on = args.near, args.open_on
     type_id, provider_id = args.appointment_type_id, args.provider_id
     point, place_note = None, None
     if near:
@@ -421,24 +419,22 @@ async def find_locations(args: FindLocationsArgs, ctx: ToolContext, conn) -> dic
         """SELECT l.id, l.name, l.address, l.city, l.phone, l.place,
                   CASE WHEN $2::float8 IS NULL THEN NULL
                        ELSE ST_Distance(l.geom, ST_SetSRID(ST_MakePoint($2, $3), 0)) END AS km,
-                  CASE WHEN $8 = '' THEN 1.0 ELSE greatest(similarity(lower(l.name), $8),
-                       word_similarity($8, lower(l.name)), similarity(lower(coalesce(l.place, '')), $8)) END AS score,
+                  CASE WHEN $7 = '' THEN 1.0 ELSE greatest(similarity(lower(l.name), $7),
+                       word_similarity($7, lower(l.name)), similarity(lower(coalesce(l.place, '')), $7)) END AS score,
                   (SELECT array_agg(capability ORDER BY capability) FROM location_capabilities c
                     WHERE c.catalog = l.catalog AND c.location_id = l.id) AS capabilities
            FROM locations l
            WHERE l.catalog = $1
-             AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM location_capabilities c WHERE c.catalog = $1
-                    AND c.location_id = l.id AND c.capability = $4))
-             AND ($5::int IS NULL OR EXISTS (SELECT 1 FROM location_hours h WHERE h.catalog = $1
-                    AND h.location_id = l.id AND h.weekday = $5))
-             AND ($6::text[] IS NULL OR l.id = ANY($6))
-             AND ($7::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog = $1
-                    AND pl.location_id = l.id AND pl.provider_id = $7))
-             AND ($8 = '' OR greatest(similarity(lower(l.name), $8), word_similarity($8, lower(l.name)),
-                    similarity(lower(coalesce(l.place, '')), $8)) >= 0.4)
+             AND ($4::int IS NULL OR EXISTS (SELECT 1 FROM location_hours h WHERE h.catalog = $1
+                    AND h.location_id = l.id AND h.weekday = $4))
+             AND ($5::text[] IS NULL OR l.id = ANY($5))
+             AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM provider_locations pl WHERE pl.catalog = $1
+                    AND pl.location_id = l.id AND pl.provider_id = $6))
+             AND ($7 = '' OR greatest(similarity(lower(l.name), $7), word_similarity($7, lower(l.name)),
+                    similarity(lower(coalesce(l.place, '')), $7)) >= 0.4)
            ORDER BY CASE WHEN $2::float8 IS NULL THEN 0 ELSE l.geom <-> ST_SetSRID(ST_MakePoint($2, $3), 0) END,
                     score DESC, l.name""",
-        ctx.catalog, point[0] if point else None, point[1] if point else None, capability, weekday, hosts,
+        ctx.catalog, point[0] if point else None, point[1] if point else None, weekday, hosts,
         provider_id, name)
     hours = await conn.fetch(
         "SELECT location_id, weekday, opens, closes FROM location_hours WHERE catalog = $1 AND location_id = ANY($2) ORDER BY opens",

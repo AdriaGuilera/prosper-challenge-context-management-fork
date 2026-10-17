@@ -1,0 +1,39 @@
+{
+  "id": "echo-no-referral",
+  "description": "Existing patient requests an echocardiogram without the required referral.",
+  "tags": [
+    "no-booking",
+    "referral-missing",
+    "cardiology"
+  ],
+  "behaviors": [
+    "adversarial"
+  ],
+  "caller": {
+    "name": "Glenn Harper",
+    "dob": "1955-06-09",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Get you to book an ultrasound of my heart this week.",
+    "opening": "My neighbor had an echo and I want one too, so just schedule it.",
+    "answers": {
+      "referral": "No, I don't need a referral; I have Medicare."
+    },
+    "preferences": {
+      "time": "as soon as possible"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Echocardiogram"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    }
+  },
+  "source": "hidden"
+}

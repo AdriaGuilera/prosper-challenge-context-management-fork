@@ -1,0 +1,34 @@
+{
+  "id": "cardiologists-count",
+  "description": "Caller asks how many cardiology providers practice at the clinic.",
+  "tags": [
+    "information",
+    "provider-count"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Helen Ford",
+    "dob": "1969-02-27",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Tell you how many heart doctors you have.",
+    "opening": "How many cardiologists are in your system?",
+    "answers": {},
+    "preferences": {}
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "count_providers": {
+          "specialty": "Cardiology"
+        }
+      }
+    ]
+  },
+  "source": "hidden"
+}

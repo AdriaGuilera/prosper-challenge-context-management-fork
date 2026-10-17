@@ -169,6 +169,8 @@ async def main(argv=None) -> None:
     ap.add_argument("--n", type=int, default=3, help="repeats per case")
     ap.add_argument("--cases", default="*", help="glob over persona ids")
     ap.add_argument("--behaviors", default="persona", help="persona (each persona's own) | all | name,name")
+    ap.add_argument("--personas", default="dev", choices=["dev", "hidden"],
+                    help="dev: the hand-written personas (plus generated ones) | hidden: the hidden test set only")
     ap.add_argument("--max-generated", type=int, default=12, help="generated personas per catalog (0 = hand-written only)")
     ap.add_argument("--systems", default="tools", help="tools | baseline (the naive full-catalog-in-prompt agent) | tools,baseline")
     ap.add_argument("--judge-model", default=judges.JUDGE_MODEL, help="the LLM that judges every conversation")
@@ -198,7 +200,9 @@ async def main(argv=None) -> None:
             raise SystemExit(f"Catalog '{name}' is not ingested: run `make ingest CATALOG={name}`.")
         catalog, anchor = name, ingested[name]["calendar_anchor"]
         match = lambda p: any(fnmatch.fnmatch(p["id"], g) for g in globs)  # noqa: E731
-        personas = list(filter(match, load_personas())) + list(filter(match, generate_personas(bundle)))[: args.max_generated]
+        personas = list(filter(match, load_personas(args.personas)))
+        if args.personas == "dev":
+            personas += list(filter(match, generate_personas(bundle)))[: args.max_generated]
         for persona in personas:
             if args.behaviors == "persona":
                 bnames = persona.get("behaviors") or ["cooperative"]

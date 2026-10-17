@@ -1,0 +1,38 @@
+{
+  "id": "arabic-dermatology-question",
+  "description": "Caller asks whether any dermatologist speaks Arabic.",
+  "tags": [
+    "information",
+    "language",
+    "dermatology"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Mina Saleh",
+    "dob": "1995-10-10",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Tell you whether there is a skin doctor who speaks Arabic.",
+    "opening": "Before I make an appointment, do you have a dermatologist who speaks Arabic?",
+    "answers": {},
+    "preferences": {
+      "language": "Arabic"
+    }
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "any_provider": {
+          "specialty": "Dermatology",
+          "language": "Arabic"
+        }
+      }
+    ]
+  },
+  "source": "hidden"
+}

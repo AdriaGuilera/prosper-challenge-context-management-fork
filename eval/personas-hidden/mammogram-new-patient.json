@@ -1,0 +1,42 @@
+{
+  "id": "mammogram-new-patient",
+  "description": "New patient requests a routine screening mammogram.",
+  "tags": [
+    "booking",
+    "radiology",
+    "screening"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Joanne Kim",
+    "dob": "1979-11-08",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Book you a routine mammogram.",
+    "opening": "I'm due for my screening mammogram and would like to get it scheduled.",
+    "answers": {
+      "reason": "This is routine screening; I don't have a lump or symptoms."
+    },
+    "preferences": {
+      "location": "near Mission Bay",
+      "time": "afternoon"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Mammogram"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Mission Bay",
+    "part_of_day": "afternoon"
+  },
+  "source": "hidden"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "therapy-new-patient",
+  "description": "New patient asks to begin therapy although therapy sessions are follow-up only.",
+  "tags": [
+    "no-booking",
+    "psychiatry",
+    "new-patient"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Gavin Lowe",
+    "dob": "1985-01-26",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Start you in weekly talk therapy.",
+    "opening": "I've been stressed and want to start therapy, preferably next week.",
+    "answers": {
+      "history": "I've never been to your clinic before and do not have a referral."
+    },
+    "preferences": {
+      "time": "soonest"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Therapy Session"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "time": "soonest"
+  },
+  "source": "hidden"
+}

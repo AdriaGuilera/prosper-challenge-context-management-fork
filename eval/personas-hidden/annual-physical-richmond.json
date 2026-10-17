@@ -1,0 +1,43 @@
+{
+  "id": "annual-physical-richmond",
+  "description": "Existing patient wants a standard annual examination near Richmond.",
+  "tags": [
+    "booking",
+    "annual",
+    "existing"
+  ],
+  "behaviors": [
+    "terse-impatient"
+  ],
+  "caller": {
+    "name": "Eleanor Price",
+    "dob": "1971-11-23",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Book you a physical near Richmond.",
+    "opening": "I need my annual physical, preferably around Richmond.",
+    "answers": {
+      "reason": "Nothing is wrong; this is just my routine yearly exam."
+    },
+    "preferences": {
+      "location": "near Richmond",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Annual Physical",
+        "Annual Wellness Visit"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "near": "Richmond",
+    "part_of_day": "morning"
+  },
+  "source": "hidden"
+}

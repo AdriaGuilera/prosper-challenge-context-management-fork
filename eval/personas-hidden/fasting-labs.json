@@ -1,0 +1,44 @@
+{
+  "id": "fasting-labs",
+  "description": "New patient requests fasting laboratory testing.",
+  "tags": [
+    "booking",
+    "lab",
+    "new-patient"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Yasmin Haddad",
+    "dob": "1988-08-09",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Schedule you for fasting blood work.",
+    "opening": "I need fasting blood tests for my employer wellness form.",
+    "answers": {
+      "fasting": "Yes, I understand I should not eat beforehand."
+    },
+    "preferences": {
+      "location": "near North Gate",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "Fasting Blood Test"
+      ],
+      "acceptable": [
+        "Blood Draw / Lab Work"
+      ],
+      "suboptimal": []
+    },
+    "near": "North Gate",
+    "part_of_day": "morning"
+  },
+  "source": "hidden"
+}

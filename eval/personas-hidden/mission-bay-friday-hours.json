@@ -1,0 +1,37 @@
+{
+  "id": "mission-bay-friday-hours",
+  "description": "Caller asks if Mission Bay Health Center operates on Friday.",
+  "tags": [
+    "information",
+    "location-hours"
+  ],
+  "behaviors": [
+    "cooperative"
+  ],
+  "caller": {
+    "name": "Rina Das",
+    "dob": "1970-03-15",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Tell you if the Mission Bay office is open Friday.",
+    "opening": "Is Mission Bay Health Center open this Friday?",
+    "answers": {},
+    "preferences": {
+      "location": "Mission Bay Health Center"
+    }
+  },
+  "expect": {
+    "outcome": "information",
+    "info": [
+      {
+        "location_open_on": {
+          "location": "Mission Bay Health Center",
+          "day": "Friday"
+        }
+      }
+    ]
+  },
+  "source": "hidden"
+}

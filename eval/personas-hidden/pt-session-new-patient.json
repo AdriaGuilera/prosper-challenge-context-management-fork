@@ -1,0 +1,40 @@
+{
+  "id": "pt-session-new-patient",
+  "description": "New patient attempts to book a physical therapy session rather than an evaluation.",
+  "tags": [
+    "no-booking",
+    "physical-therapy",
+    "new-patient"
+  ],
+  "behaviors": [
+    "correction-hunter"
+  ],
+  "caller": {
+    "name": "Lila Monroe",
+    "dob": "1973-06-16",
+    "record": {
+      "existing": false,
+      "referrals": []
+    },
+    "goal": "Book you a therapy session for my back this Friday.",
+    "opening": "I don't need an assessment; I just need a physical therapy session for my back.",
+    "answers": {
+      "history": "I've never had physical therapy at your clinic and don't have an order."
+    },
+    "preferences": {
+      "time": "afternoon"
+    }
+  },
+  "expect": {
+    "outcome": "no_booking",
+    "types": {
+      "ideal": [
+        "Physical Therapy Session"
+      ],
+      "acceptable": [],
+      "suboptimal": []
+    },
+    "part_of_day": "afternoon"
+  },
+  "source": "hidden"
+}

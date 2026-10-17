@@ -18,14 +18,17 @@ from pathlib import Path
 
 EVAL_DIR = Path(__file__).parent.parent.parent / "eval"
 PERSONA_DIR = EVAL_DIR / "personas"
+HIDDEN_DIR = EVAL_DIR / "personas-hidden"   # written by evals/hidden.py; never used to tune the agent
 BEHAVIOR_DIR = EVAL_DIR / "behaviors"
 
 # Keys the simulator may see from `caller`. Everything else stays with the judge.
 CALLER_VISIBLE = ("name", "dob", "goal", "opening", "preferences", "answers", "knows")
 
 
-def load_personas() -> list:
-    return [json.loads(p.read_text()) for p in sorted(PERSONA_DIR.glob("*.json"))]
+def load_personas(which: str = "dev") -> list:
+    """The hand-written personas ("dev") or the hidden test set ("hidden")."""
+    folder = HIDDEN_DIR if which == "hidden" else PERSONA_DIR
+    return [json.loads(p.read_text()) for p in sorted(folder.glob("*.json"))]
 
 
 def load_behaviors() -> dict:

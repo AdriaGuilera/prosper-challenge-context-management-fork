@@ -1,0 +1,48 @@
+{
+  "id": "provider-maria-garcia-ambiguity",
+  "description": "Caller remembers Dr. Maria Garcia but gives no specialty or location to distinguish duplicate provider names.",
+  "tags": [
+    "booking",
+    "provider-name",
+    "ambiguity"
+  ],
+  "behaviors": [
+    "correction-hunter"
+  ],
+  "caller": {
+    "name": "Aiden Castillo",
+    "dob": "2018-02-12",
+    "record": {
+      "existing": true,
+      "referrals": []
+    },
+    "goal": "Book you with Dr. Maria Garcia for my son's school form.",
+    "opening": "We saw Dr. Maria Garcia before and need the school physical with her again.",
+    "answers": {
+      "patient": "Aiden is eight and needs the form before November."
+    },
+    "preferences": {
+      "doctor": "Dr. Maria Garcia",
+      "time": "morning"
+    }
+  },
+  "expect": {
+    "outcome": "booking",
+    "types": {
+      "ideal": [
+        "School Physical"
+      ],
+      "acceptable": [
+        "Well-Child Visit"
+      ],
+      "suboptimal": []
+    },
+    "provider": {
+      "name": "Maria Garcia",
+      "says": "Dr. Maria Garcia",
+      "strict": true
+    },
+    "part_of_day": "morning"
+  },
+  "source": "hidden"
+}

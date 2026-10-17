@@ -15,6 +15,7 @@
 #
 
 import os
+import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -41,6 +42,7 @@ from pipecat_flows import FlowManager
 
 from agent_builder import AgentBuilder
 from agents_api import AGENTS_DIR, agent_path, model_extra, router
+from monitoring import setup_tracing
 
 # Load .env next to this file, so the bot runs the same from the repo root or backend/.
 load_dotenv(Path(__file__).parent / ".env", override=True)
@@ -60,7 +62,9 @@ async def run_bot(
     transport: BaseTransport, runner_args: RunnerArguments, builder: AgentBuilder
 ) -> None:
     config = builder.config
-    logger.info(f"Starting '{config.name}' with {len(config.nodes)} nodes")
+    # One id per call: the Langfuse session of its trace, and the prefix of its log lines.
+    call_id = str(uuid.uuid4())
+    logger.info(f"Call {call_id}: starting '{config.name}' with {len(config.nodes)} nodes")
 
     stt = ElevenLabsRealtimeSTTService(api_key=os.environ["ELEVENLABS_API_KEY"])
     tts = ElevenLabsTTSService(
@@ -94,6 +98,14 @@ async def run_bot(
         pipeline,
         params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
         idle_timeout_secs=runner_args.pipeline_idle_timeout_secs,
+        enable_tracing=setup_tracing(),
+        conversation_id=call_id,
+        additional_span_attributes={
+            "langfuse.session.id": call_id,
+            "langfuse.trace.name": f"call {config.name}",
+            "langfuse.trace.metadata.agent": config.name,
+            "langfuse.trace.metadata.model": config.model,
+        },
     )
 
     # Stream graph events (node entered, edge taken, tool calls) to the builder UI.
@@ -108,14 +120,14 @@ async def run_bot(
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
-        logger.info("Client connected — starting flow at initial node")
+        logger.info(f"Call {call_id}: client connected, starting at the initial node")
         await builder.prepare()
         await flow_manager.initialize(builder.build_initial_node())
         await builder.announce_start()
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
-        logger.info("Client disconnected")
+        logger.info(f"Call {call_id}: client disconnected")
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=runner_args.handle_sigint)
