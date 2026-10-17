@@ -3,7 +3,7 @@
 #
 # The model is both the JSON schema the LLM sees (see tools.schema_properties) and the
 # parser its arguments go through before a tool runs. Unknown keys are ignored; ids and
-# the catalog's finite vocabularies (specialty, capability, language) are checked
+# the catalog's finite vocabularies (specialty, language) are checked
 # against the database in tools._validate, since they change per catalog.
 #
 
@@ -53,11 +53,6 @@ class FindLocationsArgs(BaseModel):
     name: Optional[str] = None
     near: Optional[str] = Field(
         None, description="Place the caller named, e.g. 'Sunset' or 'Geary Blvd'."
-    )
-    capability: Optional[str] = Field(
-        None,
-        description="Equipment the location has. Only when the caller asks "
-        "about equipment itself; never as a stand-in for a visit.",
     )
     open_on: Optional[Day] = None
     appointment_type_id: Optional[str] = Field(

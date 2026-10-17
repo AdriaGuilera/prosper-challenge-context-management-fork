@@ -72,7 +72,6 @@ TOOLS = {
             "offers every visit.",
             s.FindLocationsArgs,
             fn.find_locations,
-            enums={"capability": "capability"},
         ),
         Tool(
             "check_availability",
@@ -123,7 +122,7 @@ def schema_properties(tool: Tool, ctx: Optional[ToolContext]) -> dict:
     return props
 
 
-_ENUM_ARGS = {"specialty": "specialty", "capability": "capability", "language": "language"}
+_ENUM_ARGS = {"specialty": "specialty", "language": "language"}
 
 
 def _parse(tool: Tool, args: dict) -> tuple:
@@ -147,8 +146,7 @@ async def _validate(args: dict, ctx: ToolContext, conn) -> tuple:
             allowed = ctx.enums.get(enum, [])
             match = next((a for a in allowed if a.lower() == str(args[key]).lower()), None)
             if match is None:
-                hint = " For a kind of visit, use search_appointment_types instead." if key == "capability" else ""
-                return args, {"error": f"{key} '{args[key]}' is not one of: {', '.join(allowed)}.{hint}"}, notes
+                return args, {"error": f"{key} '{args[key]}' is not one of: {', '.join(allowed)}."}, notes
             args[key] = match
     if "appointment_type_id" in args:
         tid = args["appointment_type_id"]
