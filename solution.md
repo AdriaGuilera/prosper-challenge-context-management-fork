@@ -20,14 +20,13 @@ Each node gets only the tools that are necessary for its step. Also, the prompt 
 
 ### Tools
 
-The agent has seven tools. Each tool is for one step of the call:
+The agent has six tools. Each tool is for one step of the call:
 
 - `lookup_patient`
 - `search_appointment_types`
 - `find_providers`
 - `find_locations`
 - `check_availability`
-- `list_slots`
 - `book_appointment`
 
 Each tool gives these three items to the agent:
@@ -40,7 +39,7 @@ The results contain more text than necessary. This is intentional. The text give
 
 ### Appointment type: embeddings and the Decisions API
 
-The words of the caller are frequently different from the names in the catalog, since the caller might not know the actual name of the appointment it needs. Example: the caller says "my knee hurts". The catalog has the name "Orthopedic Consultation".
+The words of the caller are frequently different from the names in the catalog, since the caller might not know the actual name of the appointment they need. Example: the caller says "my knee hurts". The catalog has the name "Orthopedic Consultation".
 
 The system uses two steps to find the correct type:
 
@@ -57,36 +56,36 @@ The system uses the probabilities to set the status:
 | `no_match`    | "None of these" has the highest probability.                                                  | "Hi, this is Maria"             | The agent asks the reason for the visit.          |
 | `unsure`      | All other conditions.                                                                         | —                               | The agent asks the caller for more data.          |
 
-The system keeps all embeddings in a cache table. Thus, the system does not pay for the same text two times (for testing purposes, so that I don't spend twice running the benchmarks)
+The system keeps all embeddings in a cache table. Thus, the system does not pay for the same text two times (for testing purposes, so that I don't spend twice running the benchmarks).
 
 ### Specialties, languages and provider names
 
 The system matches specialties and languages in a different way from provider names. Specialties and languages have a fixed number of values. Provider names do not.
 
-#### Specialties and languages: a list in the tool definition.
+#### Specialties and languages: a list in the tool definition
 
-The system reads these values from the database when the agent starts. It puts them in the tool definitions as a list of allowed values. The model selects one value from the list. Example: the caller says "a heart doctor", and the model writes "Cardiology", not "Cardiologist". In the given" catalog there are 21 specialties and 7 languages.
+The system reads these values from the database when the agent starts. It puts them in the tool definitions as a list of allowed values. The model selects one value from the list. Example: the caller says "a heart doctor", and the model writes "Cardiology", not "Cardiologist". In the "given" catalog there are 21 specialties and 7 languages.
 
 The number of values has a limit, also in the real world:
 
 - **Specialties.** The US medical boards recognize about 40 specialties and about 90 subspecialties.
 - **Languages.** Languages have a standard list (ISO 639). A clinic group has providers for some tens of languages, not more.
 
-Therefore the list stays small, also when the catalog becomes very large, costing approximately 150 to 200 tokens for each call. Making it inecessary to build a search engine with matching text or embeddings over these 2 fields.
+Therefore the list stays small, also when the catalog becomes very large, costing approximately 150 to 200 tokens for each call, making it unnecessary to build a search engine with matching text or embeddings over these 2 fields.
 
-#### Equipment (capabilities): a requirement, not a search.
+#### Equipment (capabilities): a requirement, not a search
 
-Some visits need equipment. Example: an MRI needs `imaging`, and a blood test needs `lab`. Each location has a list of its equipment. On this demo I decided that callers do not ask for equipment. They ask for a visit. Thus, the model does not get equipment as an argument, and equipment is only a rule in the code:
+Some visits need equipment. Example: an MRI needs `imaging`, and a blood test needs `lab`. Each location has a list of its equipment. In this demo I decided that callers do not ask for equipment. They ask for a visit. Thus, the model does not get equipment as an argument, and equipment is only a rule in the code:
 
 - The appointment type tells which equipment it needs.
 - The tools show only the locations that have this equipment. Example: a caller asks for an MRI near Sunset. Sunset Community Clinic has no imaging, so the agent does not offer it.
-- The book apointment tool checks the rule again before it saves the booking.
+- The book appointment tool checks the rule again before it saves the booking.
 
-#### Provider names: a text search.
+#### Provider names: a text search
 
 The number of provider names has no limit. A large catalog has thousands of names, so the system cannot put them in the prompt. Also, a name has no meaning, so embeddings do not help. The system needs a text match. The database compares each word of the name with the PostgreSQL extensions `pg_trgm` (spelling similarity) and `fuzzystrmatch` (sound similarity, with `dmetaphone` and `levenshtein`). Thus, "Dr. Garsia" finds "Dr. Maria Garcia", "Dr. Chan" finds "Dr. Chen", and "Dr. Chen" finds all providers with this name.
 
-### 3.5 Locations
+### Locations
 
 Callers usually say a street or an area name. They do not say a clinic identifier.
 
@@ -94,11 +93,11 @@ A gazetteer (a list of places) changes the place name into a point on the map. T
 
 Fuzzy matching corrects errors from speech-to-text.
 
-I decided to mock locations, since locations in the given catalog where made up and I can avoid using a API for locations.
+I decided to mock locations, since locations in the given catalog were made up and I can avoid using an API for locations.
 
 ### Latency
 
-Latency was one of my priorities for this, even though I did not focus on voice quality, i wanted to keep latency as small as possible since on a phone call, delays bigger than 2 seconds to answer give a pretty bad costumer experience.
+Latency was one of my priorities for this. Even though I did not focus on voice quality, I wanted to keep latency as small as possible since on a phone call, delays bigger than 2 seconds to answer give a pretty bad customer experience.
 
 To decrease latency:
 
@@ -107,11 +106,11 @@ To decrease latency:
 
 ## Policies
 
-Since the first moment I knew that policies must be deterministic, and is the sole thing that should always be 100% respected. Since policies are complex, its hard to represent them in CEL or some language made for checking.
+Since the first moment I knew that policies must be deterministic, and are the sole thing that should always be 100% respected. Since policies are complex, it's hard to represent them in CEL or some language made for checking.
 
-Since code is no longer the botleneck and its become cheap and fast to write I can just make policies into code, and make them hightly testable with tests. Since policies live in code I jsut can attach policies to the tools that need them.
+Since code is no longer the bottleneck and it has become cheap and fast to write, I can just make policies into code, and make them highly testable with tests. Since policies live in code, I can just attach policies to the tools that need them.
 
-It made no sense to make policies a LLM node since, I would be checking an output from an LLM with another non deterministic tool, and if I were to give the groundtruth to the LLM, I can just use that groundtruth to check with code myself.
+It made no sense to make policies an LLM node, since I would be checking an output from an LLM with another non-deterministic tool, and if I were to give the ground truth to the LLM, I can just use that ground truth to check with code myself.
 
 The booking rules are Python functions in `backend/store/policies.py`.
 
@@ -122,14 +121,15 @@ The system uses one PostgreSQL database for all data. The database has these ext
 - **pgvector:** search with embeddings.
 - **PostGIS:** distance between places.
 - **pg_trgm:** fuzzy name matching.
+- **fuzzystrmatch:** sound-alike name matching.
 
-PostgresGIS is probably overkill, but thanks to postgres extensions I was able to keep the "parts" of this demo small, just one database (postgres), that does all.
+PostGIS is probably overkill, but thanks to Postgres extensions I was able to keep the "parts" of this demo small, just one database (Postgres) that does it all.
 
 ## Mock data
 
 The catalog has no calendar, no patients and no map. I made mock data for the challenge:
 
-- **Locations.** The gazetteer as mentioned avobe.
+- **Locations.** The gazetteer as mentioned above.
 - **Calendar.** Each provider gets work hours and some existing bookings. A seed makes the data the same each time.
 - **Free slots.** SQL calculates the free slots. The agent does not calculate times.
 - **Patients.** A small list of patients, with referrals.
@@ -137,7 +137,7 @@ The catalog has no calendar, no patients and no map. I made mock data for the ch
 
 ## Evaluation
 
-To evaluate the agent, I simulated phone calls in text. Each test is a caller with a goal (for example, "a flu shot near Sunset") and a behavior (vague, impatient, adversarial, and others). gpt-4o plays the caller and talks with the agent until the call ends. The code computes the correct answer from the catalog and the policies: which visits fit, which bookings are valid, and which questions the agent must ask. Then gpt-5.6-terra reads the conversation and judges it against this answer. A conversation passes when the agent reaches a correct result and says nothing wrong. I run the same tests with a baseline agent that gets the full catalog in its prompt, and with 4 different models (since we are testing the harness not the LLM model itself). The caller model is the same for every agent model, so the comparison is fair.
+To evaluate the agent, I simulated phone calls in text. Each test is a caller with a goal (for example, "a flu shot near Sunset") and a behavior (vague, impatient, adversarial, and others). gpt-4o plays the caller and talks with the agent until the call ends. The code computes the correct answer from the catalog and the policies: which visits fit, which bookings are valid, and which questions the agent must ask. Then gpt-5.6-terra reads the conversation and judges it against this answer. A conversation passes when the agent reaches a correct result and says nothing wrong. I run the same tests with a baseline agent that gets the full catalog in its prompt, and with 4 different models (since I am testing the harness, not the LLM model itself). The caller model is the same for every agent model, so the comparison is fair.
 
 |                                      | My agent        | Baseline          |
 | ------------------------------------ | --------------- | ----------------- |
@@ -169,10 +169,10 @@ Every call is traced with OpenTelemetry and sent to Langfuse. One call is one La
 
 ## Things left out & possible improvements
 
-- **Voice quality.** The system uses the voice pipeline as it was supplied. Since challenge is about context management, that is what I focused on.
-- **An ORM (for example, TypeORM).** The system uses SQL directly. SQL is simpler, and you can see each query that the system sends.
+- **Voice quality.** The system uses the voice pipeline as it was supplied. Since the challenge is about context management, that is what I focused on.
+- **An ORM (for example, SQLAlchemy).** The system uses SQL directly. SQL is simpler, and you can see each query that the system sends.
 - **Multiple clients.** The system serves one clinic group at a time, in order to simplify the challenge. There is no separation of data, access or configuration for each client. The tables already have the catalog name in each key (for testing purposes).
-- **Policies for many clients.** The policies are Python functions, written for this catalog's 7 rules. With many clients, each clinic group has its own rules, and a code change for each client does not scale. A next step is to look for a better solution.
-- **A real calendar and real patient records.** The calendar, patients, locations are mock data.
+- **Policies for many clients.** The policies are Python functions, written for this catalog's 6 rules. With many clients, each clinic group has its own rules, and a code change for each client does not scale. A next step is to look for a better solution.
+- **A real calendar and real patient records.** The calendar, patients and locations are mock data.
 - **Audio in the tests.** The tests use text, not audio. The personas copy speech-to-text errors with spelling errors.
 - **Large test samples.** Each test ran 1 or 2 times. The results show large differences, but they are not exact rates.
