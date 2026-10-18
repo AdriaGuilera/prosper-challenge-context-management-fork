@@ -36,10 +36,18 @@ export function useCall(edgeIndex: (source: string, fn: string) => number) {
   const say = useCallback((who: TranscriptLine['who'], text: string, final: boolean) => {
     setTrace((t) => {
       const last = t.transcript[t.transcript.length - 1]
-      // Partial caller transcripts replace the in-progress line; agent output appends to its turn.
-      if (last && last.who === who && !last.final) {
-        const merged = who === 'agent' ? `${last.text} ${text}`.trim() : text
-        return { ...t, transcript: [...t.transcript.slice(0, -1), { ...last, text: merged, final: who === 'caller' ? final : false }] }
+      // The caller stays on one line until the agent answers: a short pause commits a segment,
+      // and the next one is added after it. Partials only replace the uncommitted tail.
+      if (last && who === 'caller' && last.who === 'caller') {
+        if (!text.trim()) return t
+        const committed = last.final ? last.text : (last.committed ?? '')
+        const merged = `${committed} ${text}`.trim()
+        const line = { ...last, text: merged, final, committed: final ? merged : committed }
+        return { ...t, transcript: [...t.transcript.slice(0, -1), line] }
+      }
+      // Agent output appends to its turn until the turn closes.
+      if (last && who === 'agent' && last.who === 'agent' && !last.final) {
+        return { ...t, transcript: [...t.transcript.slice(0, -1), { ...last, text: `${last.text} ${text}`.trim() }] }
       }
       if (!text.trim()) return t
       return { ...t, transcript: [...t.transcript, { id: crypto.randomUUID(), who, text, final }] }
