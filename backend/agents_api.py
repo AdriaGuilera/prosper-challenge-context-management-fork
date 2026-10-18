@@ -80,7 +80,7 @@ def list_tools() -> list:
 # (time to first token, streaming, tools attached): all land around 1-2s, which
 # a voice turn needs. GPT-5.6 models run with reasoning off for the same reason.
 MODELS = [
-    {"id": "gpt-4o", "label": "GPT-4o", "note": "Default. Proven on this agent"},
+    {"id": "gpt-4o", "label": "GPT-4o", "note": "Default"},
     {"id": "gpt-4o-mini", "label": "GPT-4o mini", "note": "Faster, cheaper"},
     {"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "note": "Newest. Fast tier, made for conversation", "reasoning_effort": "none"},
     {"id": "gpt-5.6-terra", "label": "GPT-5.6 Terra", "note": "Newest. Balanced, stronger reasoning", "reasoning_effort": "none"},
