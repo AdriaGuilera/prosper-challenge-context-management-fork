@@ -31,7 +31,8 @@ The agent has six tools. Each tool is for one step of the call:
 
 Each tool gives these three items to the agent:
 
-- **A status.** The status tells the agent the result. Each tool has its own values (see the table below).
+- **A status.** The status tells the agent the result. Each tool has its own values
+
 - **An instruction.** The instruction tells the agent the next step. Example: "These are easy to confuse. Ask a question that tells them apart."
 - **A maximum of 5 options.** The tool also gives the total number of options. Thus, the context stays small when the catalog is large.
 
