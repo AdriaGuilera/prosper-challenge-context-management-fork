@@ -23,6 +23,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
+from pipecat.audio.filters.rnnoise_filter import RNNoiseFilter
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -36,6 +37,7 @@ from pipecat.runner.utils import create_transport
 from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.workers.runner import WorkerRunner
 from pipecat_flows import FlowManager
@@ -54,7 +56,10 @@ FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 
 
 transport_params = {
-    "webrtc": lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
+    # RNNoise strips background noise from the mic before VAD and STT hear it.
+    "webrtc": lambda: TransportParams(
+        audio_in_enabled=True, audio_out_enabled=True, audio_in_filter=RNNoiseFilter()
+    ),
 }
 
 
@@ -66,7 +71,11 @@ async def run_bot(
     call_id = str(uuid.uuid4())
     logger.info(f"Call {call_id}: starting '{config.name}' with {len(config.nodes)} nodes")
 
-    stt = ElevenLabsRealtimeSTTService(api_key=os.environ["ELEVENLABS_API_KEY"])
+    # Pinned to English: auto-detect turned short or noisy utterances into other languages.
+    stt = ElevenLabsRealtimeSTTService(
+        api_key=os.environ["ELEVENLABS_API_KEY"],
+        settings=ElevenLabsRealtimeSTTService.Settings(language=Language.EN),
+    )
     tts = ElevenLabsTTSService(
         api_key=os.environ["ELEVENLABS_API_KEY"],
         settings=ElevenLabsTTSService.Settings(voice=config.voice_id),

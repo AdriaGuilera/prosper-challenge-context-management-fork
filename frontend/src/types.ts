@@ -79,6 +79,7 @@ export interface TranscriptLine {
   who: 'caller' | 'agent'
   text: string
   final: boolean
+  committed?: string // caller only: the finished segments of this line, before the live partial
 }
 
 export interface ToolCall {
