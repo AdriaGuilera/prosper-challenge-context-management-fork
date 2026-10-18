@@ -5,7 +5,7 @@
 # - elevenlabs / openai: service extras
 # - tracing:    OpenTelemetry spans for each call (monitoring.py)
 # OpenAI is a core pipecat dependency; the elevenlabs services need no extra SDK.
-pipecat-ai[runner,webrtc,silero,elevenlabs,openai,tracing]>=1.4.0,<2
+pipecat-ai[runner,webrtc,silero,rnnoise,elevenlabs,openai,tracing]>=1.4.0,<2
 # Pipecat Flows: node-graph conversations (used by flow_agent.py).
 pipecat-ai-flows>=1.3.0,<2
 # Monitoring: OpenTelemetry traces exported to Langfuse over OTLP/HTTP (monitoring.py).
